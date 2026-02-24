@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Judging — HackHub</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+    <div class="animated-bg"></div>
+
+    <nav class="navbar">
+        <a href="/" class="nav-logo">⚡ HackHub</a>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/teams.html">Teams</a></li>
+            <li><a href="/submit.html">Submit</a></li>
+            <li><a href="/leaderboard.html">Leaderboard</a></li>
+        </ul>
+        <div id="auth-buttons" style="display:none">
+            <a href="/auth.html" class="btn btn-primary btn-sm">Sign In</a>
+        </div>
+        <div id="user-menu">
+            <span class="user-name">User</span>
+            <img class="user-avatar" src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff"
+                alt="avatar" />
+            <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+            <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="dashboard">
+        <div class="section">
+            <div class="section-header">
+                <h1 class="section-title">⚖️ Judging Panel</h1>
+                <p class="section-subtitle">Score projects on innovation, design, impact, and technical execution</p>
+            </div>
+
+            <div id="judge-access" class="hidden">
+                <div id="projects-to-judge">
+                    <div class="loading-overlay">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="no-judge-access" class="hidden">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔒</div>
+                    <p class="empty-state-text">This page is restricted to authorized judges only</p>
+                    <a href="/dashboard.html" class="btn btn-primary">Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Modal -->
+    <div class="modal-overlay hidden" id="score-modal">
+        <div class="modal" style="max-width: 550px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="score-project-title">Score Project</h3>
+                <button class="modal-close" id="close-score-modal">&times;</button>
+            </div>
+
+            <div class="scoring-slider">
+                <label>💡 Innovation <span id="innovation-val">5</span>/10</label>
+                <input type="range" min="1" max="10" value="5" id="score-innovation" />
+            </div>
+
+            <div class="scoring-slider">
+                <label>🎨 Design <span id="design-val">5</span>/10</label>
+                <input type="range" min="1" max="10" value="5" id="score-design" />
+            </div>
+
+            <div class="scoring-slider">
+                <label>🌍 Impact <span id="impact-val">5</span>/10</label>
+                <input type="range" min="1" max="10" value="5" id="score-impact" />
+            </div>
+
+            <div class="scoring-slider">
+                <label>⚙️ Technical <span id="technical-val">5</span>/10</label>
+                <input type="range" min="1" max="10" value="5" id="score-technical" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Comments</label>
+                <textarea class="form-input" id="score-comments" placeholder="Your feedback..." rows="3"></textarea>
+            </div>
+
+            <div style="text-align:center;margin:var(--space-lg) 0;">
+                <span style="font-size:2rem;font-weight:800;font-family:'Outfit',sans-serif;" class="text-gradient"
+                    id="total-score">20</span>
+                <span style="color:var(--text-muted);font-size:0.9rem;">/40 total</span>
+            </div>
+
+            <button class="btn btn-primary btn-lg" id="submit-score-btn" style="width:100%">Submit Score</button>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module">
+        import { requireAuth, initNavAuth, getUser } from '/js/auth.js';
+        import { isJudge, getProjects, submitScore } from '/js/app.js';
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        let currentJudgeId = null;
+        let currentProjectId = null;
+
+        // Slider value displays
+        ['innovation', 'design', 'impact', 'technical'].forEach(field => {
+            const slider = document.getElementById(`score-${field}`);
+            const display = document.getElementById(`${field}-val`);
+            slider.addEventListener('input', () => {
+                display.textContent = slider.value;
+                updateTotal();
+            });
+        });
+
+        function updateTotal() {
+            const total = ['innovation', 'design', 'impact', 'technical']
+                .reduce((sum, f) => sum + parseInt(document.getElementById(`score-${f}`).value), 0);
+            document.getElementById('total-score').textContent = total;
+        }
+
+        async function init() {
+            const session = await requireAuth();
+            if (!session) return;
+
+            initNavAuth();
+            const user = await getUser();
+
+            // Check judge access
+            const judgeData = await isJudge(user.id);
+            if (!judgeData) {
+                document.getElementById('no-judge-access').classList.remove('hidden');
+                return;
+            }
+
+            currentJudgeId = judgeData.id;
+            document.getElementById('judge-access').classList.remove('hidden');
+
+            // Load projects
+            const projects = await getProjects();
+            const container = document.getElementById('projects-to-judge');
+
+            if (!projects.length) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><p class="empty-state-text">No projects submitted yet</p></div>';
+                return;
+            }
+
+            container.innerHTML = `<div class="projects-grid">${projects.map(p => {
+                const techHtml = (p.tech_stack || []).map(t => `<span class="tag">${t}</span>`).join('');
+                return `
+          <div class="card">
+            <h3 class="project-card-title">${p.title}</h3>
+            <p style="color:var(--accent-secondary);font-size:0.8rem;margin-bottom:var(--space-sm);">by ${p.teams?.team_name || 'Unknown'}</p>
+            <p class="project-card-desc">${p.description || 'No description'}</p>
+            <div class="tags-container mb-md">${techHtml}</div>
+            <div class="project-links">
+              ${p.github_url ? `<a href="${p.github_url}" target="_blank" class="btn btn-secondary btn-sm">GitHub</a>` : ''}
+              ${p.demo_url ? `<a href="${p.demo_url}" target="_blank" class="btn btn-primary btn-sm">Demo</a>` : ''}
+            </div>
+            <button class="btn btn-primary mt-md score-btn" data-project-id="${p.id}" data-project-title="${p.title}" style="width:100%">⚖️ Score</button>
+          </div>
+        `;
+            }).join('')}</div>`;
+
+            // Score buttons
+            container.querySelectorAll('.score-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentProjectId = btn.dataset.projectId;
+                    document.getElementById('score-project-title').textContent = btn.dataset.projectTitle;
+                    // Reset sliders
+                    ['innovation', 'design', 'impact', 'technical'].forEach(f => {
+                        document.getElementById(`score-${f}`).value = 5;
+                        document.getElementById(`${f}-val`).textContent = 5;
+                    });
+                    document.getElementById('score-comments').value = '';
+                    updateTotal();
+                    document.getElementById('score-modal').classList.remove('hidden');
+                });
+            });
+        }
+
+        // Close modal
+        document.getElementById('close-score-modal').addEventListener('click', () => {
+            document.getElementById('score-modal').classList.add('hidden');
+        });
+
+        // Submit score
+        document.getElementById('submit-score-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('submit-score-btn');
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            try {
+                await submitScore(currentJudgeId, currentProjectId, {
+                    innovation: parseInt(document.getElementById('score-innovation').value),
+                    design: parseInt(document.getElementById('score-design').value),
+                    impact: parseInt(document.getElementById('score-impact').value),
+                    technical: parseInt(document.getElementById('score-technical').value),
+                    comments: document.getElementById('score-comments').value.trim(),
+                });
+
+                showToast('Score submitted!');
+                document.getElementById('score-modal').classList.add('hidden');
+            } catch (err) {
+                showToast(err.message || 'Failed to submit score', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit Score';
+            }
+        });
+
+        init();
+    </script>
+</body>
+
+</html>

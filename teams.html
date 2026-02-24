@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teams — HackHub</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+    <div class="animated-bg"></div>
+
+    <nav class="navbar">
+        <a href="/" class="nav-logo">⚡ HackHub</a>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/teams.html" class="active">Teams</a></li>
+            <li><a href="/submit.html">Submit</a></li>
+            <li><a href="/leaderboard.html">Leaderboard</a></li>
+        </ul>
+        <div id="auth-buttons">
+            <a href="/auth.html" class="btn btn-secondary btn-sm">Sign In</a>
+            <a href="/auth.html" class="btn btn-primary btn-sm">Register</a>
+        </div>
+        <div id="user-menu">
+            <span class="user-name">User</span>
+            <img class="user-avatar" src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff"
+                alt="avatar" />
+            <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+            <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+        </div>
+        <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+    </nav>
+
+    <div class="dashboard">
+        <div class="section">
+            <div
+                style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-md);margin-bottom:var(--space-2xl);">
+                <div>
+                    <h1 class="section-title" style="text-align:left;margin-bottom:var(--space-sm);">Teams</h1>
+                    <p style="color:var(--text-secondary);">Find your dream team or create your own</p>
+                </div>
+                <button class="btn btn-primary" id="create-team-btn">+ Create Team</button>
+            </div>
+
+            <!-- Tabs -->
+            <div style="display:flex;gap:var(--space-md);margin-bottom:var(--space-xl);">
+                <button class="btn btn-secondary tab-btn active-tab" data-tab="teams">🏢 All Teams</button>
+                <button class="btn btn-secondary tab-btn" data-tab="participants">👤 Looking for Team</button>
+            </div>
+
+            <!-- Teams Grid -->
+            <div id="teams-tab" class="teams-grid">
+                <div class="loading-overlay" style="grid-column:1/-1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <!-- Participants Grid -->
+            <div id="participants-tab" class="teams-grid hidden">
+                <div class="loading-overlay" style="grid-column:1/-1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Team Modal -->
+    <div class="modal-overlay hidden" id="create-team-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Create a Team</h3>
+                <button class="modal-close" id="close-modal">&times;</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Team Name</label>
+                <input type="text" class="form-input" id="team-name-input" placeholder="The Innovators" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-input" id="team-desc-input" placeholder="What's your team about?"
+                    rows="3"></textarea>
+            </div>
+            <button class="btn btn-primary" id="submit-team-btn" style="width: 100%">Create Team</button>
+        </div>
+    </div>
+
+    <!-- Add Member by Email Modal -->
+    <div class="modal-overlay hidden" id="add-member-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Member by Email</h3>
+                <button class="modal-close" id="close-add-member-modal">&times;</button>
+            </div>
+            <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:var(--space-lg);">
+                Enter the email of a registered HackHub user to add them to your team.
+            </p>
+            <div class="form-group">
+                <label class="form-label">Member Email</label>
+                <input type="email" class="form-input" id="add-member-email" placeholder="teammate@example.com" />
+            </div>
+            <button class="btn btn-primary" id="add-member-btn" style="width: 100%">➕ Add to Team</button>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module">
+        import { initNavAuth, getSession, getUser } from '/js/auth.js';
+        import { getTeams, getParticipants, createTeam, joinTeam, getUserTeam, addTeamMemberByEmail } from '/js/app.js';
+
+        initNavAuth();
+
+        let currentUser = null;
+        let currentUserTeam = null; // { role, teams: { id, ... } }
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-tab'));
+                btn.classList.add('active-tab');
+                const tab = btn.dataset.tab;
+                document.getElementById('teams-tab').classList.toggle('hidden', tab !== 'teams');
+                document.getElementById('participants-tab').classList.toggle('hidden', tab !== 'participants');
+            });
+        });
+
+        // Style active tab
+        const style = document.createElement('style');
+        style.textContent = `.active-tab { background: var(--accent-primary) !important; color: white !important; border-color: var(--accent-primary) !important; }`;
+        document.head.appendChild(style);
+
+        async function loadTeams() {
+            try {
+                const teams = await getTeams();
+                const container = document.getElementById('teams-tab');
+
+                if (!teams.length) {
+                    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">🏢</div><p class="empty-state-text">No teams yet. Be the first!</p></div>';
+                    return;
+                }
+
+                container.innerHTML = teams.map(team => {
+                    const members = team.team_members || [];
+                    const memberCount = members.length;
+                    const maxMembers = team.max_members || 4;
+                    const isFull = memberCount >= maxMembers;
+                    const isMember = currentUser && members.some(m => m.user_id === currentUser.id);
+                    const isLeader = currentUserTeam && currentUserTeam.role === 'leader' && currentUserTeam.teams?.id === team.id;
+
+                    const avatarsHtml = members.slice(0, 5).map(m => {
+                        const profile = m.profiles;
+                        const src = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.display_name || 'U')}&background=6c63ff&color=fff&size=36`;
+                        return `<img src="${src}" alt="${profile?.display_name || 'member'}" title="${profile?.display_name || 'member'}" />`;
+                    }).join('');
+
+                    const skillsHtml = members.flatMap(m => m.profiles?.skills || [])
+                        .filter((v, i, a) => a.indexOf(v) === i)
+                        .slice(0, 4)
+                        .map(s => `<span class="tag">${s}</span>`).join('');
+
+                    // Action buttons
+                    let actionHtml = '';
+                    if (isLeader) {
+                        actionHtml = `
+              <span class="tag tag-success" style="margin-bottom:var(--space-sm);display:inline-block;">👑 You are Leader</span>
+              ${!isFull ? `<button class="btn btn-secondary btn-sm add-member-btn" data-team-id="${team.id}" style="width:100%;margin-top:var(--space-sm);">➕ Add Member by Email</button>` : ''}
+            `;
+                    } else if (isMember) {
+                        actionHtml = '<span class="tag tag-success">✓ Your Team</span>';
+                    } else if (!isFull && currentUser && !currentUserTeam) {
+                        actionHtml = `<button class="btn btn-primary btn-sm join-team-btn" data-team-id="${team.id}" style="width:100%">Join Team</button>`;
+                    } else if (isFull) {
+                        actionHtml = '<span class="tag tag-warning">Team Full</span>';
+                    } else if (currentUser && currentUserTeam && !isMember) {
+                        actionHtml = '<span class="tag" style="opacity:0.5">You\'re already in a team</span>';
+                    }
+
+                    return `
+            <div class="card">
+              <div class="team-card-header">
+                <h3 class="team-name">${team.team_name}</h3>
+                <span class="team-members-count">${memberCount}/${maxMembers}</span>
+              </div>
+              <p class="team-description">${team.description || 'No description'}</p>
+              <div class="team-avatars">${avatarsHtml}</div>
+              <div class="tags-container mb-md">${skillsHtml}</div>
+              ${actionHtml}
+            </div>
+          `;
+                }).join('');
+
+                // Join buttons
+                container.querySelectorAll('.join-team-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        try {
+                            btn.disabled = true;
+                            btn.textContent = 'Joining...';
+                            await joinTeam(btn.dataset.teamId, currentUser.id);
+                            showToast('🎉 Team joined!');
+                            // Refresh user team data
+                            currentUserTeam = await getUserTeam(currentUser.id);
+                            loadTeams();
+                        } catch (err) {
+                            showToast(err.message || 'Failed to join', 'error');
+                            btn.disabled = false;
+                            btn.textContent = 'Join Team';
+                        }
+                    });
+                });
+
+                // Add member by email buttons (for team leaders)
+                container.querySelectorAll('.add-member-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.getElementById('add-member-modal').classList.remove('hidden');
+                        document.getElementById('add-member-modal').dataset.teamId = btn.dataset.teamId;
+                    });
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function loadParticipants() {
+            try {
+                const participants = await getParticipants({ lookingForTeam: true });
+                const container = document.getElementById('participants-tab');
+
+                if (!participants.length) {
+                    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">👤</div><p class="empty-state-text">No one is looking for a team right now</p></div>';
+                    return;
+                }
+
+                container.innerHTML = participants.map(p => {
+                    const avatarSrc = p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.display_name || 'U')}&background=6c63ff&color=fff&size=80`;
+                    const skillsHtml = (p.skills || []).map(s => `<span class="tag">${s}</span>`).join('');
+
+                    return `
+            <div class="card">
+              <div class="profile-avatar-container">
+                <img class="profile-avatar" src="${avatarSrc}" alt="${p.display_name}" />
+                <div class="profile-info">
+                  <h3>${p.display_name || 'Anonymous'}</h3>
+                  <p>${p.experience_level || 'Not specified'}</p>
+                </div>
+              </div>
+              <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:var(--space-md);">${p.bio || 'No bio yet'}</p>
+              <div class="tags-container">${skillsHtml}</div>
+            </div>
+          `;
+                }).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // ── Create team modal ──
+        document.getElementById('create-team-btn').addEventListener('click', async () => {
+            const session = await getSession();
+            if (!session) {
+                window.location.href = '/auth.html';
+                return;
+            }
+            if (currentUserTeam) {
+                showToast('You already have a team — leave it first before creating a new one', 'error');
+                return;
+            }
+            document.getElementById('create-team-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('close-modal').addEventListener('click', () => {
+            document.getElementById('create-team-modal').classList.add('hidden');
+        });
+
+        document.getElementById('submit-team-btn').addEventListener('click', async () => {
+            const name = document.getElementById('team-name-input').value.trim();
+            const desc = document.getElementById('team-desc-input').value.trim();
+
+            if (!name) {
+                showToast('Team name is required', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('submit-team-btn');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                await createTeam(name, desc, currentUser.id);
+                showToast('🎉 Team created!');
+                document.getElementById('create-team-modal').classList.add('hidden');
+                document.getElementById('team-name-input').value = '';
+                document.getElementById('team-desc-input').value = '';
+                // Refresh user team data
+                currentUserTeam = await getUserTeam(currentUser.id);
+                loadTeams();
+            } catch (err) {
+                showToast(err.message || 'Failed to create team', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create Team';
+            }
+        });
+
+        // ── Add member by email modal ──
+        document.getElementById('close-add-member-modal').addEventListener('click', () => {
+            document.getElementById('add-member-modal').classList.add('hidden');
+        });
+
+        document.getElementById('add-member-btn').addEventListener('click', async () => {
+            const email = document.getElementById('add-member-email').value.trim();
+            const teamId = document.getElementById('add-member-modal').dataset.teamId;
+
+            if (!email || !email.includes('@')) {
+                showToast('Please enter a valid email', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('add-member-btn');
+            btn.disabled = true;
+            btn.textContent = 'Adding...';
+
+            try {
+                await addTeamMemberByEmail(teamId, email);
+                showToast('🎉 Member added!');
+                document.getElementById('add-member-modal').classList.add('hidden');
+                document.getElementById('add-member-email').value = '';
+                loadTeams();
+            } catch (err) {
+                showToast(err.message || 'Failed to add member', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '➕ Add to Team';
+            }
+        });
+
+        // ── Init ──
+        (async () => {
+            const session = await getSession();
+            if (session) {
+                currentUser = await getUser();
+                try {
+                    currentUserTeam = await getUserTeam(currentUser.id);
+                } catch (err) {
+                    currentUserTeam = null;
+                }
+            }
+            loadTeams();
+            loadParticipants();
+        })();
+    </script>
+</body>
+
+</html>

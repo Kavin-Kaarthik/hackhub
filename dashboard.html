@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — HackHub</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+    <div class="animated-bg"></div>
+
+    <!-- ═══ NAVBAR ═══ -->
+    <nav class="navbar">
+        <a href="/" class="nav-logo">⚡ HackHub</a>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/teams.html">Teams</a></li>
+            <li><a href="/submit.html">Submit</a></li>
+            <li><a href="/leaderboard.html">Leaderboard</a></li>
+        </ul>
+        <div id="auth-buttons" style="display:none">
+            <a href="/auth.html" class="btn btn-primary btn-sm">Sign In</a>
+        </div>
+        <div id="user-menu">
+            <span class="user-name">User</span>
+            <img class="user-avatar" src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff"
+                alt="avatar" />
+            <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="dashboard">
+        <div class="dashboard-header">
+            <h1 class="welcome-text">Welcome back, <span class="text-gradient" id="user-display-name">Hacker</span> 👋
+            </h1>
+            <p class="welcome-sub">Here's your hackathon overview</p>
+        </div>
+
+        <div class="dashboard-grid">
+
+            <!-- Profile Card -->
+            <div class="card profile-card" id="profile-card">
+                <h3 style="margin-bottom: var(--space-lg);">👤 Your Profile</h3>
+                <div class="profile-avatar-container">
+                    <img class="profile-avatar" id="profile-avatar"
+                        src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff" alt="avatar" />
+                    <div class="profile-info">
+                        <h3 id="profile-name">–</h3>
+                        <p id="profile-email">–</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Display Name</label>
+                    <input type="text" class="form-input" id="edit-name" placeholder="Your name" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Bio</label>
+                    <textarea class="form-input" id="edit-bio" placeholder="Tell us about yourself..."
+                        rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Skills (comma separated)</label>
+                    <input type="text" class="form-input" id="edit-skills" placeholder="React, Python, UI/UX..." />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Experience Level</label>
+                    <select class="form-input" id="edit-experience">
+                        <option value="">Select level</option>
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                        <option value="expert">Expert</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:var(--space-md);">
+                    <input type="checkbox" id="edit-looking" style="width:auto" />
+                    <label for="edit-looking" style="color:var(--text-secondary);font-size:0.9rem;cursor:pointer;">I'm
+                        looking for a team</label>
+                </div>
+                <button class="btn btn-primary" id="save-profile-btn" style="width: 100%">Save Profile</button>
+            </div>
+
+            <!-- Team Status -->
+            <div class="card" id="team-status-card">
+                <h3 style="margin-bottom: var(--space-lg);">👥 Your Team</h3>
+                <div id="team-status-content">
+                    <div class="loading-overlay">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="card">
+                <h3 style="margin-bottom: var(--space-lg);">🚀 Quick Actions</h3>
+                <div style="display:flex;flex-direction:column;gap:var(--space-md);">
+                    <a href="/teams.html" class="btn btn-secondary" style="width:100%">👥 Browse Teams</a>
+                    <a href="/submit.html" class="btn btn-secondary" style="width:100%">📝 Submit Project</a>
+                    <a href="/leaderboard.html" class="btn btn-secondary" style="width:100%">🏆 View Leaderboard</a>
+                    <a href="/judging.html" class="btn btn-secondary" style="width:100%" id="judging-link"
+                        style="display:none">⚖️ Judging Panel</a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module">
+        import { requireAuth, initNavAuth, getUser } from '/js/auth.js';
+        import { getProfile, updateProfile, getUserTeam, isJudge } from '/js/app.js';
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        async function init() {
+            const session = await requireAuth();
+            if (!session) return;
+
+            initNavAuth();
+            const user = await getUser();
+            const userId = user.id;
+
+            // Load profile
+            try {
+                const profile = await getProfile(userId);
+                document.getElementById('user-display-name').textContent = profile.display_name || 'Hacker';
+                document.getElementById('profile-name').textContent = profile.display_name || '–';
+                document.getElementById('profile-email').textContent = profile.email || '–';
+                if (profile.avatar_url) {
+                    document.getElementById('profile-avatar').src = profile.avatar_url;
+                }
+
+                // Fill edit form
+                document.getElementById('edit-name').value = profile.display_name || '';
+                document.getElementById('edit-bio').value = profile.bio || '';
+                document.getElementById('edit-skills').value = (profile.skills || []).join(', ');
+                document.getElementById('edit-experience').value = profile.experience_level || '';
+                document.getElementById('edit-looking').checked = profile.looking_for_team || false;
+            } catch (err) {
+                console.error('Profile load error:', err);
+            }
+
+            // Save profile
+            document.getElementById('save-profile-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('save-profile-btn');
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+
+                try {
+                    const skillsRaw = document.getElementById('edit-skills').value;
+                    const skills = skillsRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+                    await updateProfile(userId, {
+                        display_name: document.getElementById('edit-name').value.trim(),
+                        bio: document.getElementById('edit-bio').value.trim(),
+                        skills,
+                        experience_level: document.getElementById('edit-experience').value || null,
+                        looking_for_team: document.getElementById('edit-looking').checked,
+                    });
+
+                    showToast('Profile saved!');
+                    document.getElementById('profile-name').textContent = document.getElementById('edit-name').value.trim();
+                    document.getElementById('user-display-name').textContent = document.getElementById('edit-name').value.trim();
+                } catch (err) {
+                    showToast(err.message || 'Failed to save', 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Profile';
+                }
+            });
+
+            // Load team status
+            try {
+                const teamData = await getUserTeam(userId);
+                const container = document.getElementById('team-status-content');
+
+                if (teamData && teamData.teams) {
+                    container.innerHTML = `
+            <div style="padding: var(--space-md) 0;">
+              <h4 style="margin-bottom: var(--space-sm);">${teamData.teams.team_name}</h4>
+              <p style="color: var(--text-secondary); font-size: 0.9rem;">${teamData.teams.description || 'No description'}</p>
+              <div class="mt-md">
+                <span class="tag">${teamData.role}</span>
+              </div>
+              <a href="/teams.html" class="btn btn-secondary btn-sm mt-lg" style="width:100%">View Team</a>
+            </div>
+          `;
+                } else {
+                    container.innerHTML = `
+            <div class="empty-state" style="padding: var(--space-lg) 0;">
+              <div class="empty-state-icon">🔍</div>
+              <p class="empty-state-text">You haven't joined a team yet</p>
+              <a href="/teams.html" class="btn btn-primary">Find a Team</a>
+            </div>
+          `;
+                }
+            } catch (err) {
+                console.error('Team load error:', err);
+            }
+
+            // Check if judge
+            try {
+                const judgeData = await isJudge(userId);
+                if (judgeData) {
+                    document.getElementById('judging-link').style.display = 'block';
+                }
+            } catch (err) { }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

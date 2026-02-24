@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leaderboard — HackHub</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+    <div class="animated-bg"></div>
+
+    <nav class="navbar">
+        <a href="/" class="nav-logo">⚡ HackHub</a>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/teams.html">Teams</a></li>
+            <li><a href="/submit.html">Submit</a></li>
+            <li><a href="/leaderboard.html" class="active">Leaderboard</a></li>
+        </ul>
+        <div id="auth-buttons">
+            <a href="/auth.html" class="btn btn-secondary btn-sm">Sign In</a>
+            <a href="/auth.html" class="btn btn-primary btn-sm">Register</a>
+        </div>
+        <div id="user-menu">
+            <span class="user-name">User</span>
+            <img class="user-avatar" src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff"
+                alt="avatar" />
+            <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+            <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+        </div>
+        <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+    </nav>
+
+    <div class="dashboard">
+        <div class="section">
+            <div class="section-header">
+                <h1 class="section-title">🏆 Leaderboard</h1>
+                <p class="section-subtitle">Live rankings updated in real-time</p>
+            </div>
+
+            <!-- Podium (Top 3) -->
+            <div class="podium" id="podium">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Full Rankings -->
+            <div class="card" style="overflow-x:auto;">
+                <table class="leaderboard-table" id="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Project</th>
+                            <th>Team</th>
+                            <th>Innovation</th>
+                            <th>Design</th>
+                            <th>Impact</th>
+                            <th>Technical</th>
+                            <th>Avg Score</th>
+                            <th>Judges</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <tr>
+                            <td colspan="9" style="text-align:center;padding:40px;">
+                                <div class="spinner" style="margin:0 auto;"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module">
+        import { initNavAuth } from '/js/auth.js';
+        import { getLeaderboard, subscribeToScores } from '/js/app.js';
+
+        initNavAuth();
+
+        function renderPodium(entries) {
+            const podium = document.getElementById('podium');
+            if (entries.length < 1) {
+                podium.innerHTML = '<div class="empty-state" style="width:100%;"><div class="empty-state-icon">🏆</div><p class="empty-state-text">No scores yet — check back after judging!</p></div>';
+                return;
+            }
+
+            // Order for podium: 2nd, 1st, 3rd
+            const order = [1, 0, 2];
+            const medals = ['🥇', '🥈', '🥉'];
+
+            podium.innerHTML = order.map(i => {
+                const entry = entries[i];
+                if (!entry) return '';
+                const rank = i + 1;
+                return `
+          <div class="podium-item podium-${rank}">
+            <div style="margin-bottom:var(--space-sm);font-size:2rem;">${medals[i]}</div>
+            <div class="podium-name">${entry.title}</div>
+            <div class="podium-score">${entry.teams?.team_name || 'Unknown'}</div>
+            <div class="podium-bar">
+              <div class="podium-rank">${entry.avg_score}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);">avg score</div>
+            </div>
+          </div>
+        `;
+            }).join('');
+        }
+
+        function renderTable(entries) {
+            const body = document.getElementById('leaderboard-body');
+
+            if (!entries.length) {
+                body.innerHTML = '<tr><td colspan="9" class="empty-state" style="padding:40px;"><div class="empty-state-icon">📊</div><p class="empty-state-text">No scores yet</p></td></tr>';
+                return;
+            }
+
+            body.innerHTML = entries.map((entry, idx) => {
+                const rank = idx + 1;
+                const rankClass = rank <= 3 ? `rank-${rank}` : '';
+
+                // Compute per-category averages
+                const scores = entry.scores || [];
+                const count = scores.length || 1;
+                const avg = (field) => {
+                    const sum = scores.reduce((a, s) => a + (s[field] || 0), 0);
+                    return (sum / count).toFixed(1);
+                };
+
+                const scoreBar = (val) => `
+          <div class="score-bar">
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:${val * 10}%"></div></div>
+            <span class="score-value">${val}</span>
+          </div>
+        `;
+
+                return `
+          <tr>
+            <td class="rank-cell ${rankClass}">#${rank}</td>
+            <td><strong>${entry.title}</strong></td>
+            <td style="color:var(--text-secondary);">${entry.teams?.team_name || 'Unknown'}</td>
+            <td>${scoreBar(avg('innovation'))}</td>
+            <td>${scoreBar(avg('design'))}</td>
+            <td>${scoreBar(avg('impact'))}</td>
+            <td>${scoreBar(avg('technical'))}</td>
+            <td><strong class="text-gradient">${entry.avg_score}</strong></td>
+            <td style="color:var(--text-muted);">${entry.total_judges}</td>
+          </tr>
+        `;
+            }).join('');
+        }
+
+        async function loadLeaderboard() {
+            try {
+                const entries = await getLeaderboard();
+                renderPodium(entries);
+                renderTable(entries);
+            } catch (err) {
+                console.error('Leaderboard error:', err);
+            }
+        }
+
+        loadLeaderboard();
+
+        // Real-time updates
+        subscribeToScores(() => {
+            loadLeaderboard();
+        });
+    </script>
+</body>
+
+</html>

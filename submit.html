@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Submit Project — HackHub</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+    <div class="animated-bg"></div>
+
+    <nav class="navbar">
+        <a href="/" class="nav-logo">⚡ HackHub</a>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/teams.html">Teams</a></li>
+            <li><a href="/submit.html" class="active">Submit</a></li>
+            <li><a href="/leaderboard.html">Leaderboard</a></li>
+        </ul>
+        <div id="auth-buttons">
+            <a href="/auth.html" class="btn btn-secondary btn-sm">Sign In</a>
+            <a href="/auth.html" class="btn btn-primary btn-sm">Register</a>
+        </div>
+        <div id="user-menu">
+            <span class="user-name">User</span>
+            <img class="user-avatar" src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff"
+                alt="avatar" />
+            <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+            <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="dashboard">
+        <div class="section">
+            <div class="section-header">
+                <h1 class="section-title">Project Submissions</h1>
+                <p class="section-subtitle">Submit your hack and showcase it to the world</p>
+            </div>
+
+            <!-- Submit Form (for team leaders) -->
+            <div id="submit-form-container" class="hidden" style="max-width:650px;margin:0 auto var(--space-3xl);">
+                <div class="card">
+                    <h3 style="margin-bottom:var(--space-xl);">📝 Submit Your Project</h3>
+                    <div class="form-group">
+                        <label class="form-label">Project Title</label>
+                        <input type="text" class="form-input" id="project-title" placeholder="My Awesome Hack" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-input" id="project-desc"
+                            placeholder="What does your project do? What problem does it solve?" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">GitHub URL</label>
+                        <input type="url" class="form-input" id="project-github" placeholder="https://github.com/..." />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Demo URL (optional)</label>
+                        <input type="url" class="form-input" id="project-demo"
+                            placeholder="https://your-demo.vercel.app" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tech Stack (comma separated)</label>
+                        <input type="text" class="form-input" id="project-tech"
+                            placeholder="React, Node.js, Supabase..." />
+                    </div>
+                    <button class="btn btn-primary btn-lg" id="submit-project-btn" style="width:100%">🚀 Submit
+                        Project</button>
+                </div>
+            </div>
+
+            <div id="no-team-msg" class="hidden" style="max-width:650px;margin:0 auto var(--space-3xl);">
+                <div class="card empty-state">
+                    <div class="empty-state-icon">👥</div>
+                    <p class="empty-state-text">You need to be a team leader to submit a project</p>
+                    <a href="/teams.html" class="btn btn-primary">Find or Create a Team</a>
+                </div>
+            </div>
+
+            <!-- Projects Gallery -->
+            <h2 style="margin-bottom:var(--space-xl);font-size:1.5rem;">🏗️ All Submissions</h2>
+            <div class="projects-grid" id="projects-container">
+                <div class="loading-overlay" style="grid-column:1/-1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module">
+        import { initNavAuth, getSession, getUser } from '/js/auth.js';
+        import { getProjects, submitProject, getUserTeam } from '/js/app.js';
+
+        initNavAuth();
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        let currentTeamId = null;
+
+        async function loadProjects() {
+            try {
+                const projects = await getProjects();
+                const container = document.getElementById('projects-container');
+
+                if (!projects.length) {
+                    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">🏗️</div><p class="empty-state-text">No projects submitted yet. Be the first!</p></div>';
+                    return;
+                }
+
+                container.innerHTML = projects.map(p => {
+                    const techHtml = (p.tech_stack || []).map(t => `<span class="tag">${t}</span>`).join('');
+                    const teamName = p.teams?.team_name || 'Unknown Team';
+                    const date = new Date(p.submitted_at).toLocaleDateString();
+
+                    return `
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:var(--space-sm);">
+                <h3 class="project-card-title">${p.title}</h3>
+              </div>
+              <p style="color:var(--accent-secondary);font-size:0.8rem;margin-bottom:var(--space-sm);">by ${teamName} • ${date}</p>
+              <p class="project-card-desc">${p.description || 'No description provided'}</p>
+              <div class="tags-container mb-md">${techHtml}</div>
+              <div class="project-links">
+                ${p.github_url ? `<a href="${p.github_url}" target="_blank" class="btn btn-secondary btn-sm">GitHub</a>` : ''}
+                ${p.demo_url ? `<a href="${p.demo_url}" target="_blank" class="btn btn-primary btn-sm">Live Demo</a>` : ''}
+              </div>
+            </div>
+          `;
+                }).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Init
+        (async () => {
+            const session = await getSession();
+            if (session) {
+                const user = await getUser();
+                try {
+                    const teamData = await getUserTeam(user.id);
+                    if (teamData && teamData.role === 'leader') {
+                        currentTeamId = teamData.teams.id;
+                        document.getElementById('submit-form-container').classList.remove('hidden');
+                    } else {
+                        document.getElementById('no-team-msg').classList.remove('hidden');
+                    }
+                } catch (err) {
+                    document.getElementById('no-team-msg').classList.remove('hidden');
+                }
+            }
+
+            loadProjects();
+        })();
+
+        // Submit project
+        document.getElementById('submit-project-btn').addEventListener('click', async () => {
+            const title = document.getElementById('project-title').value.trim();
+            const description = document.getElementById('project-desc').value.trim();
+            const github_url = document.getElementById('project-github').value.trim();
+            const demo_url = document.getElementById('project-demo').value.trim();
+            const techRaw = document.getElementById('project-tech').value;
+            const tech_stack = techRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+            if (!title) {
+                showToast('Project title is required', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('submit-project-btn');
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            try {
+                await submitProject({
+                    team_id: currentTeamId,
+                    title,
+                    description,
+                    github_url: github_url || null,
+                    demo_url: demo_url || null,
+                    tech_stack,
+                });
+
+                showToast('Project submitted!');
+                document.getElementById('project-title').value = '';
+                document.getElementById('project-desc').value = '';
+                document.getElementById('project-github').value = '';
+                document.getElementById('project-demo').value = '';
+                document.getElementById('project-tech').value = '';
+                loadProjects();
+            } catch (err) {
+                showToast(err.message || 'Submission failed', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Submit Project';
+            }
+        });
+    </script>
+</body>
+
+</html>

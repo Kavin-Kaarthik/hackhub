@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HackHub — The Ultimate Hackathon Platform</title>
+  <meta name="description"
+    content="Join HackHub 2026 — form teams, build projects, and compete for incredible prizes at the ultimate hackathon." />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+  <div class="grid-bg"></div>
+  <div class="animated-bg"></div>
+
+  <!-- ═══ NAVBAR ═══ -->
+  <nav class="navbar" id="navbar">
+    <a href="/" class="nav-logo">⚡ HackHub</a>
+    <ul class="nav-links">
+      <li><a href="#prizes">Prizes</a></li>
+      <li><a href="/teams.html">Teams</a></li>
+      <li><a href="/leaderboard.html">Leaderboard</a></li>
+    </ul>
+    <div id="auth-buttons">
+      <a href="/auth.html" class="btn btn-secondary btn-sm">Sign In</a>
+      <a href="/auth.html" class="btn btn-primary btn-sm">Register</a>
+    </div>
+    <div id="user-menu">
+      <span class="user-name">User</span>
+      <img class="user-avatar" src="https://ui-avatars.com/api/?name=U&background=6c63ff&color=fff" alt="avatar" />
+      <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+      <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+    </div>
+    <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+  </nav>
+
+  <!-- ═══ HERO ═══ -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">🔥 Registration Open — Limited Spots!</div>
+      <h1 class="hero-title">
+        Build. Innovate.<br />
+        <span class="gradient-text">Win Big.</span>
+      </h1>
+      <p class="hero-description">
+        Join hundreds of developers, designers, and innovators for a 48-hour hackathon where ideas become reality. Form
+        your dream team, build something extraordinary, and compete for amazing prizes.
+      </p>
+
+      <!-- Countdown -->
+      <div class="countdown" id="countdown">
+        <div class="countdown-item">
+          <div class="countdown-value" id="cd-days">00</div>
+          <div class="countdown-label">Days</div>
+        </div>
+        <div class="countdown-item">
+          <div class="countdown-value" id="cd-hours">00</div>
+          <div class="countdown-label">Hours</div>
+        </div>
+        <div class="countdown-item">
+          <div class="countdown-value" id="cd-minutes">00</div>
+          <div class="countdown-label">Minutes</div>
+        </div>
+        <div class="countdown-item">
+          <div class="countdown-value" id="cd-seconds">00</div>
+          <div class="countdown-label">Seconds</div>
+        </div>
+      </div>
+
+      <div class="hero-buttons">
+        <a href="/auth.html" class="btn btn-primary btn-lg">🚀 Register Now</a>
+        <a href="/teams.html" class="btn btn-secondary btn-lg">👥 View Teams</a>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-value">48h</div>
+          <div class="stat-label">Of Hacking</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">$10K+</div>
+          <div class="stat-label">In Prizes</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">50+</div>
+          <div class="stat-label">Teams</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">20+</div>
+          <div class="stat-label">Mentors</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+
+  <!-- ═══ PRIZES ═══ -->
+  <section class="section" id="prizes">
+    <div class="section-header">
+      <h2 class="section-title">Prizes & Rewards</h2>
+      <p class="section-subtitle">Compete for incredible prizes and recognition</p>
+    </div>
+    <div class="prizes-grid">
+      <div class="card prize-card gold">
+        <div class="prize-icon">🥇</div>
+        <h3 class="prize-title">1st Place</h3>
+        <div class="prize-amount">$5,000</div>
+        <ul class="prize-perks">
+          <li>Cash prize</li>
+          <li>Mentorship from industry leaders</li>
+          <li>Featured on HackHub showcase</li>
+          <li>Internship opportunities</li>
+        </ul>
+      </div>
+      <div class="card prize-card silver">
+        <div class="prize-icon">🥈</div>
+        <h3 class="prize-title">2nd Place</h3>
+        <div class="prize-amount">$3,000</div>
+        <ul class="prize-perks">
+          <li>Cash prize</li>
+          <li>Tech gadgets bundle</li>
+          <li>Featured on HackHub showcase</li>
+        </ul>
+      </div>
+      <div class="card prize-card bronze">
+        <div class="prize-icon">🥉</div>
+        <h3 class="prize-title">3rd Place</h3>
+        <div class="prize-amount">$2,000</div>
+        <ul class="prize-perks">
+          <li>Cash prize</li>
+          <li>Cloud credits</li>
+          <li>Featured on HackHub showcase</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ SPONSORS ═══ -->
+  <section class="section" id="sponsors">
+    <div class="section-header">
+      <h2 class="section-title">Our Sponsors</h2>
+      <p class="section-subtitle">Backed by the best in tech</p>
+    </div>
+    <div class="stats-row" style="gap: 60px; opacity: 0.5;">
+      <div class="stat-item">
+        <div class="stat-value" style="font-size: 1.4rem;">TechCorp</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="font-size: 1.4rem;">CloudBase</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="font-size: 1.4rem;">DevStudio</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="font-size: 1.4rem;">InnovateLab</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="footer">
+    <ul class="footer-links">
+      <li><a href="/teams.html">Teams</a></li>
+      <li><a href="/leaderboard.html">Leaderboard</a></li>
+      <li><a href="/auth.html">Register</a></li>
+    </ul>
+    <p>© 2026 HackHub. Built with ❤️ for hackers worldwide.</p>
+  </footer>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script type="module">
+    import { initNavAuth } from '/js/auth.js';
+
+    // Init nav auth state
+    initNavAuth();
+
+    // Mobile menu toggle
+    document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+      document.getElementById('navbar').classList.toggle('menu-open');
+    });
+
+    // ── Countdown Timer ──
+    const eventDate = new Date('2026-03-15T09:00:00Z');
+
+    function updateCountdown() {
+      const now = new Date();
+      const diff = eventDate - now;
+
+      if (diff <= 0) {
+        document.getElementById('cd-days').textContent = '🔥';
+        document.getElementById('cd-hours').textContent = 'LIVE';
+        document.getElementById('cd-minutes').textContent = '🔥';
+        document.getElementById('cd-seconds').textContent = 'NOW';
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      document.getElementById('cd-days').textContent = String(days).padStart(2, '0');
+      document.getElementById('cd-hours').textContent = String(hours).padStart(2, '0');
+      document.getElementById('cd-minutes').textContent = String(minutes).padStart(2, '0');
+      document.getElementById('cd-seconds').textContent = String(seconds).padStart(2, '0');
+    }
+
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+  </script>
+</body>
+
+</html>
