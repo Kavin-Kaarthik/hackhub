@@ -1,5 +1,14 @@
 {
   "buildCommand": "vite build",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/dashboard",  "destination": "/dashboard.html" },
+    { "source": "/teams",      "destination": "/teams.html" },
+    { "source": "/submit",     "destination": "/submit.html" },
+    { "source": "/judging",    "destination": "/judging.html" },
+    { "source": "/leaderboard","destination": "/leaderboard.html" },
+    { "source": "/admin",      "destination": "/admin.html" },
+    { "source": "/auth",       "destination": "/auth.html" }
+  ]
 }
