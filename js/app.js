@@ -514,9 +514,7 @@ export async function getAllJudges() {
     if (error) throw error;
     return data;
 }
-
 export async function addJudgeByEmail(email) {
-    // Look up user
     const { data: profile, error: pErr } = await supabase
         .from('profiles')
         .select('id, display_name, email')
@@ -525,7 +523,15 @@ export async function addJudgeByEmail(email) {
     if (pErr) throw pErr;
     if (!profile) throw new Error('No registered user found with that email');
 
-    // Check if already a judge
+    // ── NEW: block team members ──
+    const { data: teamMembership } = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('user_id', profile.id)
+        .maybeSingle();
+    if (teamMembership) throw new Error('This person is already in a team and cannot be a judge');
+    // ────────────────────────────
+
     const { data: existing } = await supabase
         .from('judges')
         .select('id')
@@ -533,7 +539,6 @@ export async function addJudgeByEmail(email) {
         .maybeSingle();
     if (existing) throw new Error('This user is already a judge');
 
-    // Insert
     const { error } = await supabase
         .from('judges')
         .insert({
@@ -543,7 +548,6 @@ export async function addJudgeByEmail(email) {
         });
     if (error) throw error;
 }
-
 export async function removeJudge(judgeId) {
     const { error } = await supabase
         .from('judges')
