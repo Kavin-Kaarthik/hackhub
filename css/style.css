@@ -1120,7 +1120,7 @@ select.form-input {
   font-size: 1rem;
   font-weight: 400;
 }
-}
+
 
 .welcome-sub {
   color: var(--text-secondary);
@@ -1222,6 +1222,7 @@ select.form-input {
   margin-bottom: var(--space-md);
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
