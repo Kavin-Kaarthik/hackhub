@@ -478,16 +478,22 @@ export function subscribeToScores(callback) {
 // ═══════════════════════════════════════════════════════
 // CURRENT (broken for this project - checks profiles.role which doesn't exist here)
  
-// FIX - check the admins table instead
+// NEW - fixed
 export async function isAdmin(userId) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', userId)
+    .maybeSingle();
+  if (!profile?.email) return false;
+
   const { data } = await supabase
     .from('admins')
     .select('id')
-    .eq('user_id', userId)
+    .eq('email', profile.email)
     .maybeSingle();
   return !!data;
 }
-
 export async function getAllUsers() {
     const { data, error } = await supabase
         .from('profiles')
