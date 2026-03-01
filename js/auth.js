@@ -47,13 +47,20 @@ export async function signOut() {
 }
 
 // ── Route protection ─────────────────────────────────
+// Waits for Supabase to finish processing any OAuth callback in the URL
+// before checking session — fixes the redirect flash after Google login
 export async function requireAuth() {
-    const session = await getSession();
-    if (!session) {
-        window.location.href = '/auth.html';
-        return null;
-    }
-    return session;
+    return new Promise((resolve) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            subscription.unsubscribe();
+            if (!session) {
+                window.location.href = '/auth.html';
+                resolve(null);
+            } else {
+                resolve(session);
+            }
+        });
+    });
 }
 
 // ── Auth state listener ──────────────────────────────
