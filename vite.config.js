@@ -12,6 +12,7 @@ export default defineConfig({
                 submit: resolve(__dirname, 'submit.html'),
                 judging: resolve(__dirname, 'judging.html'),
                 leaderboard: resolve(__dirname, 'leaderboard.html'),
+                admin: resolve(__dirname, 'admin.html'),
             },
         },
     },

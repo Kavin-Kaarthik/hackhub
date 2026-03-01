@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel — HackHub</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+    <div class="animated-bg"></div>
+
+    <nav class="navbar">
+        <a href="/" class="nav-logo">⚡ HackHub</a>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/teams.html">Teams</a></li>
+            <li><a href="/submit.html">Submit</a></li>
+            <li><a href="/leaderboard.html">Leaderboard</a></li>
+        </ul>
+        <div id="auth-buttons" style="display:none"></div>
+        <div id="user-menu">
+            <span class="user-name">Admin</span>
+            <img class="user-avatar" src="https://ui-avatars.com/api/?name=A&background=6c63ff&color=fff"
+                alt="avatar" />
+            <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+            <button class="btn btn-sm btn-outline" id="sign-out-btn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="dashboard">
+        <div class="section">
+
+            <!-- Header -->
+            <div
+                style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-md);margin-bottom:var(--space-2xl);">
+                <div>
+                    <h1 class="section-title" style="text-align:left;margin-bottom:var(--space-sm);">🔧 Admin Panel</h1>
+                    <p style="color:var(--text-secondary);">Manage judges, view users, and monitor the hackathon</p>
+                </div>
+            </div>
+
+            <!-- No Access -->
+            <div id="no-access" class="hidden">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔒</div>
+                    <p class="empty-state-text">Admin access required</p>
+                    <a href="/dashboard.html" class="btn btn-primary">Back to Dashboard</a>
+                </div>
+            </div>
+
+            <!-- Admin Content -->
+            <div id="admin-content" class="hidden">
+
+                <!-- Stats -->
+                <div
+                    style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--space-lg);margin-bottom:var(--space-2xl);">
+                    <div class="card" style="text-align:center;padding:var(--space-xl);">
+                        <div class="stat-value" id="stat-users">-</div>
+                        <div class="stat-label">Registered Users</div>
+                    </div>
+                    <div class="card" style="text-align:center;padding:var(--space-xl);">
+                        <div class="stat-value" id="stat-teams">-</div>
+                        <div class="stat-label">Teams</div>
+                    </div>
+                    <div class="card" style="text-align:center;padding:var(--space-xl);">
+                        <div class="stat-value" id="stat-projects">-</div>
+                        <div class="stat-label">Submissions</div>
+                    </div>
+                    <div class="card" style="text-align:center;padding:var(--space-xl);">
+                        <div class="stat-value" id="stat-judges">-</div>
+                        <div class="stat-label">Judges</div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div style="display:flex;gap:var(--space-md);margin-bottom:var(--space-xl);">
+                    <button class="btn btn-secondary admin-tab active-tab" data-tab="judges-tab">⚖️ Judges</button>
+                    <button class="btn btn-secondary admin-tab" data-tab="users-tab">👥 All Users</button>
+                </div>
+
+                <!-- ═══ JUDGES TAB ═══ -->
+                <div id="judges-tab">
+                    <div class="card" style="margin-bottom:var(--space-xl);padding:var(--space-xl);">
+                        <h3 style="margin-bottom:var(--space-lg);">➕ Add New Judge</h3>
+                        <div style="display:flex;gap:var(--space-md);flex-wrap:wrap;">
+                            <input type="email" class="form-input" id="judge-email-input"
+                                placeholder="Enter registered user's email" style="flex:1;min-width:250px;" />
+                            <button class="btn btn-primary" id="add-judge-btn">Add as Judge</button>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-bottom:var(--space-lg);">Current Judges</h3>
+                    <div id="judges-list">
+                        <div class="loading-overlay">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ USERS TAB ═══ -->
+                <div id="users-tab" class="hidden">
+                    <h3 style="margin-bottom:var(--space-lg);">All Registered Users</h3>
+                    <div class="card" style="overflow-x:auto;">
+                        <table class="leaderboard-table" id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>Skills</th>
+                                    <th>Joined</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-body">
+                                <tr>
+                                    <td colspan="6" style="text-align:center;padding:40px;">
+                                        <div class="spinner" style="margin:0 auto;"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module">
+        import { requireAuth, initNavAuth, getUser } from '/js/auth.js';
+        import { isAdmin, getAllUsers, getAllJudges, addJudgeByEmail, removeJudge, getEventStats } from '/js/app.js';
+        import { escapeHtml } from '/js/util.js';
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        // Tab switching
+        const tabStyle = document.createElement('style');
+        tabStyle.textContent = `.active-tab { background: var(--accent-primary) !important; color: white !important; border-color: var(--accent-primary) !important; }`;
+        document.head.appendChild(tabStyle);
+
+        document.querySelectorAll('.admin-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active-tab'));
+                btn.classList.add('active-tab');
+                const tab = btn.dataset.tab;
+                document.getElementById('judges-tab').classList.toggle('hidden', tab !== 'judges-tab');
+                document.getElementById('users-tab').classList.toggle('hidden', tab !== 'users-tab');
+            });
+        });
+
+        // ── Load Stats ──
+        async function loadStats() {
+            try {
+                const stats = await getEventStats();
+                document.getElementById('stat-users').textContent = stats.users;
+                document.getElementById('stat-teams').textContent = stats.teams;
+                document.getElementById('stat-projects').textContent = stats.projects;
+                document.getElementById('stat-judges').textContent = stats.judges;
+            } catch (err) {
+                console.error('Stats error:', err);
+            }
+        }
+
+        // ── Load Judges ──
+        async function loadJudges() {
+            try {
+                const judges = await getAllJudges();
+                const container = document.getElementById('judges-list');
+
+                if (!judges.length) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚖️</div><p class="empty-state-text">No judges added yet</p></div>';
+                    return;
+                }
+
+                container.innerHTML = `<div class="teams-grid">${judges.map(j => {
+                    const profile = j.profiles;
+                    const avatarSrc = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(j.name || 'J')}&background=6c63ff&color=fff&size=60`;
+                    const name = escapeHtml(j.name || 'Unknown');
+                    const email = escapeHtml(j.email || profile?.email || '–');
+                    return `
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);padding:var(--space-lg);">
+              <div style="display:flex;align-items:center;gap:var(--space-md);">
+                <img src="${escapeHtml(avatarSrc)}" style="width:48px;height:48px;border-radius:50%;border:2px solid var(--accent-primary);object-fit:cover;" alt="" />
+                <div>
+                  <strong>${name}</strong>
+                  <p style="color:var(--text-secondary);font-size:0.85rem;">${email}</p>
+                </div>
+              </div>
+              <button class="btn btn-sm remove-judge-btn" data-judge-id="${j.id}" style="background:rgba(239,83,80,0.15);color:var(--error);border:1px solid rgba(239,83,80,0.3);">Remove</button>
+            </div>
+          `;
+                }).join('')}</div>`;
+
+                // Remove buttons
+                container.querySelectorAll('.remove-judge-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (!confirm('Remove this judge?')) return;
+                        try {
+                            btn.disabled = true;
+                            btn.textContent = 'Removing...';
+                            await removeJudge(btn.dataset.judgeId);
+                            showToast('Judge removed');
+                            loadJudges();
+                            loadStats();
+                        } catch (err) {
+                            showToast(err.message || 'Failed to remove', 'error');
+                            btn.disabled = false;
+                            btn.textContent = 'Remove';
+                        }
+                    });
+                });
+            } catch (err) {
+                console.error('Judges error:', err);
+                showToast(err.message || 'Failed to load judges', 'error');
+            }
+        }
+
+        // ── Load Users ──
+        async function loadUsers() {
+            try {
+                const users = await getAllUsers();
+                const body = document.getElementById('users-body');
+
+                body.innerHTML = users.map(u => {
+                    const avatarSrc = u.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.display_name || 'U')}&background=6c63ff&color=fff&size=32`;
+                    const skillsHtml = (u.skills || []).slice(0, 3).map(s => `<span class="tag">${escapeHtml(s)}</span>`).join('');
+                    const date = new Date(u.created_at).toLocaleDateString();
+                    const roleTag = u.role === 'admin'
+                        ? '<span class="tag" style="background:rgba(255,167,38,0.15);color:var(--warning);">admin</span>'
+                        : '<span class="tag">participant</span>';
+                    const displayName = escapeHtml(u.display_name || 'Anonymous');
+                    const email = escapeHtml(u.email || '–');
+                    const emailAttr = escapeHtml(u.email || '').replace(/"/g, '&quot;');
+
+                    return `
+            <tr>
+              <td style="display:flex;align-items:center;gap:var(--space-sm);">
+                <img src="${escapeHtml(avatarSrc)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" alt="" />
+                ${displayName}
+              </td>
+              <td style="color:var(--text-secondary);font-size:0.85rem;">${email}</td>
+              <td>${roleTag}</td>
+              <td><div class="tags-container">${skillsHtml}</div></td>
+              <td style="color:var(--text-muted);font-size:0.85rem;">${date}</td>
+              <td>
+                <button class="btn btn-sm btn-secondary make-judge-btn" data-email="${emailAttr}">Make Judge</button>
+              </td>
+            </tr>
+          `;
+                }).join('');
+
+                // Make judge buttons
+                body.querySelectorAll('.make-judge-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        try {
+                            btn.disabled = true;
+                            btn.textContent = 'Adding...';
+                            await addJudgeByEmail(btn.dataset.email);
+                            showToast('🎉 Judge added!');
+                            loadJudges();
+                            loadStats();
+                            btn.textContent = '✅ Added';
+                        } catch (err) {
+                            showToast(err.message || 'Failed', 'error');
+                            btn.disabled = false;
+                            btn.textContent = 'Make Judge';
+                        }
+                    });
+                });
+            } catch (err) {
+                console.error('Users error:', err);
+                showToast(err.message || 'Failed to load users', 'error');
+            }
+        }
+
+        // ── Add Judge by Email ──
+        document.getElementById('add-judge-btn').addEventListener('click', async () => {
+            const email = document.getElementById('judge-email-input').value.trim();
+            if (!email || !email.includes('@')) {
+                showToast('Enter a valid email', 'error');
+                return;
+            }
+            const btn = document.getElementById('add-judge-btn');
+            btn.disabled = true;
+            btn.textContent = 'Adding...';
+            try {
+                await addJudgeByEmail(email);
+                showToast('🎉 Judge added!');
+                document.getElementById('judge-email-input').value = '';
+                loadJudges();
+                loadStats();
+            } catch (err) {
+                showToast(err.message || 'Failed to add judge', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Add as Judge';
+            }
+        });
+
+        // Enter key on input
+        document.getElementById('judge-email-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('add-judge-btn').click();
+        });
+
+        // ── Init ──
+        async function init() {
+            const session = await requireAuth();
+            if (!session) return;
+
+            initNavAuth();
+            const user = await getUser();
+
+            // Check admin
+            const admin = await isAdmin(user.id);
+            if (!admin) {
+                document.getElementById('no-access').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('admin-content').classList.remove('hidden');
+            loadStats();
+            loadJudges();
+            loadUsers();
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

@@ -154,6 +154,177 @@ export async function getUserTeam(userId) {
 }
 
 // ═══════════════════════════════════════════════════════
+// TEAM INVITATIONS & REQUESTS
+// ═══════════════════════════════════════════════════════
+export async function sendTeamInvitation(teamId, userId) {
+    // Check if invitation already exists
+    const { data: existing } = await supabase
+        .from('team_invitations')
+        .select('id')
+        .eq('team_id', teamId)
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .maybeSingle();
+    if (existing) throw new Error('Invitation already sent to this user');
+
+    // Check if user already in team
+    const { data: isMember } = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('team_id', teamId)
+        .eq('user_id', userId)
+        .maybeSingle();
+    if (isMember) throw new Error('User is already in the team');
+
+    const { error } = await supabase
+        .from('team_invitations')
+        .insert({
+            team_id: teamId,
+            user_id: userId,
+            status: 'pending',
+            sent_at: new Date().toISOString()
+        });
+    if (error) throw error;
+}
+
+const DEFAULT_MAX_TEAM_MEMBERS = 10;
+
+export async function acceptTeamInvitation(invitationId, userId) {
+    // Get invitation details
+    const { data: invitation, error: invErr } = await supabase
+        .from('team_invitations')
+        .select('*')
+        .eq('id', invitationId)
+        .single();
+    if (invErr) throw invErr;
+    if (invitation.user_id !== userId || invitation.status !== 'pending') {
+        throw new Error('Invalid invitation');
+    }
+
+    // Check team capacity (use count for accuracy; max_members may be null)
+    const { data: team } = await supabase
+        .from('teams')
+        .select('max_members')
+        .eq('id', invitation.team_id)
+        .single();
+    const maxMembers = team?.max_members ?? DEFAULT_MAX_TEAM_MEMBERS;
+    const { count: memberCount } = await supabase
+        .from('team_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('team_id', invitation.team_id);
+    if ((memberCount ?? 0) >= maxMembers) {
+        throw new Error('Team is full');
+    }
+
+    // Add user to team
+    const { error: memberErr } = await supabase
+        .from('team_members')
+        .insert({ team_id: invitation.team_id, user_id: userId, role: 'member' });
+    if (memberErr) throw memberErr;
+
+    // Update invitation status
+    const { error: updateErr } = await supabase
+        .from('team_invitations')
+        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .eq('id', invitationId);
+    if (updateErr) throw updateErr;
+
+    // Update looking_for_team flag
+    await supabase.from('profiles').update({ looking_for_team: false }).eq('id', userId);
+}
+
+export async function rejectTeamInvitation(invitationId, userId) {
+    // Verify ownership
+    const { data: invitation } = await supabase
+        .from('team_invitations')
+        .select('user_id')
+        .eq('id', invitationId)
+        .single();
+    if (invitation.user_id !== userId) {
+        throw new Error('Unauthorized');
+    }
+
+    const { error } = await supabase
+        .from('team_invitations')
+        .update({ status: 'rejected', responded_at: new Date().toISOString() })
+        .eq('id', invitationId);
+    if (error) throw error;
+}
+
+export async function getPendingInvitations(userId) {
+    const { data, error } = await supabase
+        .from('team_invitations')
+        .select(`
+            *,
+            teams:team_id (id, team_name, description, max_members, team_members(count))
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .order('sent_at', { ascending: false });
+    if (error) throw error;
+    return data;
+}
+
+export async function getPendingRequests(teamId) {
+    const { data, error } = await supabase
+        .from('team_invitations')
+        .select(`
+            *,
+            profiles:user_id (id, display_name, avatar_url, skills, experience_level, bio)
+        `)
+        .eq('team_id', teamId)
+        .eq('status', 'pending')
+        .order('sent_at', { ascending: false });
+    if (error) throw error;
+    return data;
+}
+
+// ═══════════════════════════════════════════════════════
+// TEAM MEMBER MANAGEMENT
+// ═══════════════════════════════════════════════════════
+export async function removeTeamMember(teamId, userId) {
+    const { error } = await supabase
+        .from('team_members')
+        .delete()
+        .eq('team_id', teamId)
+        .eq('user_id', userId);
+    if (error) throw error;
+
+    // Update looking_for_team flag
+    await supabase.from('profiles').update({ looking_for_team: true }).eq('id', userId);
+}
+
+export async function deleteTeam(teamId) {
+    // Get member user_ids BEFORE deleting (so we can reset looking_for_team)
+    const { data: members, error: fetchErr } = await supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', teamId);
+    if (fetchErr) throw fetchErr;
+
+    // Delete all team_members
+    const { error: membersErr } = await supabase
+        .from('team_members')
+        .delete()
+        .eq('team_id', teamId);
+    if (membersErr) throw membersErr;
+
+    // Update all former members' looking_for_team flag
+    if (members?.length) {
+        for (const member of members) {
+            await supabase.from('profiles').update({ looking_for_team: true }).eq('id', member.user_id);
+        }
+    }
+
+    // Delete team
+    const { error } = await supabase
+        .from('teams')
+        .delete()
+        .eq('id', teamId);
+    if (error) throw error;
+}
+
+// ═══════════════════════════════════════════════════════
 // EVENTS
 // ═══════════════════════════════════════════════════════
 export async function getEvent() {
@@ -235,12 +406,16 @@ export async function isJudge(userId) {
 }
 
 export async function submitScore(judgeId, projectId, scores) {
+    // Only persist schema columns: innovation, design, impact, technical, scored_at
     const { data, error } = await supabase
         .from('scores')
         .upsert({
             judge_id: judgeId,
             project_id: projectId,
-            ...scores,
+            innovation: scores.innovation,
+            design: scores.design,
+            impact: scores.impact,
+            technical: scores.technical,
             scored_at: new Date().toISOString(),
         }, { onConflict: 'judge_id,project_id' })
         .select()
@@ -293,4 +468,92 @@ export function subscribeToScores(callback) {
             callback(payload);
         })
         .subscribe();
+}
+
+// ═══════════════════════════════════════════════════════
+// ADMIN
+// ═══════════════════════════════════════════════════════
+// CURRENT (broken for this project - checks profiles.role which doesn't exist here)
+ 
+// FIX - check the admins table instead
+export async function isAdmin(userId) {
+  const { data } = await supabase
+    .from('admins')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
+
+export async function getAllUsers() {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+}
+
+export async function getAllJudges() {
+    const { data, error } = await supabase
+        .from('judges')
+        .select(`
+            *,
+            profiles:user_id (display_name, avatar_url, email)
+        `)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+}
+
+export async function addJudgeByEmail(email) {
+    // Look up user
+    const { data: profile, error: pErr } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .eq('email', email)
+        .maybeSingle();
+    if (pErr) throw pErr;
+    if (!profile) throw new Error('No registered user found with that email');
+
+    // Check if already a judge
+    const { data: existing } = await supabase
+        .from('judges')
+        .select('id')
+        .eq('user_id', profile.id)
+        .maybeSingle();
+    if (existing) throw new Error('This user is already a judge');
+
+    // Insert
+    const { error } = await supabase
+        .from('judges')
+        .insert({
+            user_id: profile.id,
+            name: profile.display_name || email,
+            email: profile.email,
+        });
+    if (error) throw error;
+}
+
+export async function removeJudge(judgeId) {
+    const { error } = await supabase
+        .from('judges')
+        .delete()
+        .eq('id', judgeId);
+    if (error) throw error;
+}
+
+export async function getEventStats() {
+    const [usersRes, teamsRes, projectsRes, judgesRes] = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('teams').select('id', { count: 'exact', head: true }),
+        supabase.from('projects').select('id', { count: 'exact', head: true }),
+        supabase.from('judges').select('id', { count: 'exact', head: true }),
+    ]);
+    return {
+        users: usersRes?.count ?? 0,
+        teams: teamsRes?.count ?? 0,
+        projects: projectsRes?.count ?? 0,
+        judges: judgesRes?.count ?? 0,
+    };
 }

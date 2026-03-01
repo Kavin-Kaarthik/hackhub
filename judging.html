@@ -88,11 +88,6 @@
                 <input type="range" min="1" max="10" value="5" id="score-technical" />
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Comments</label>
-                <textarea class="form-input" id="score-comments" placeholder="Your feedback..." rows="3"></textarea>
-            </div>
-
             <div style="text-align:center;margin:var(--space-lg) 0;">
                 <span style="font-size:2rem;font-weight:800;font-family:'Outfit',sans-serif;" class="text-gradient"
                     id="total-score">20</span>
@@ -108,6 +103,7 @@
     <script type="module">
         import { requireAuth, initNavAuth, getUser } from '/js/auth.js';
         import { isJudge, getProjects, submitScore } from '/js/app.js';
+        import { escapeHtml } from '/js/util.js';
 
         function showToast(msg, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -164,18 +160,24 @@
             }
 
             container.innerHTML = `<div class="projects-grid">${projects.map(p => {
-                const techHtml = (p.tech_stack || []).map(t => `<span class="tag">${t}</span>`).join('');
+                const techHtml = (p.tech_stack || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
+                const title = escapeHtml(p.title);
+                const titleAttr = title.replace(/"/g, '&quot;');
+                const teamName = escapeHtml(p.teams?.team_name || 'Unknown');
+                const desc = escapeHtml(p.description || 'No description');
+                const githubUrl = p.github_url ? escapeHtml(p.github_url) : '';
+                const demoUrl = p.demo_url ? escapeHtml(p.demo_url) : '';
                 return `
           <div class="card">
-            <h3 class="project-card-title">${p.title}</h3>
-            <p style="color:var(--accent-secondary);font-size:0.8rem;margin-bottom:var(--space-sm);">by ${p.teams?.team_name || 'Unknown'}</p>
-            <p class="project-card-desc">${p.description || 'No description'}</p>
+            <h3 class="project-card-title">${title}</h3>
+            <p style="color:var(--accent-secondary);font-size:0.8rem;margin-bottom:var(--space-sm);">by ${teamName}</p>
+            <p class="project-card-desc">${desc}</p>
             <div class="tags-container mb-md">${techHtml}</div>
             <div class="project-links">
-              ${p.github_url ? `<a href="${p.github_url}" target="_blank" class="btn btn-secondary btn-sm">GitHub</a>` : ''}
-              ${p.demo_url ? `<a href="${p.demo_url}" target="_blank" class="btn btn-primary btn-sm">Demo</a>` : ''}
+              ${githubUrl ? `<a href="${githubUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">GitHub</a>` : ''}
+              ${demoUrl ? `<a href="${demoUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">Demo</a>` : ''}
             </div>
-            <button class="btn btn-primary mt-md score-btn" data-project-id="${p.id}" data-project-title="${p.title}" style="width:100%">⚖️ Score</button>
+            <button class="btn btn-primary mt-md score-btn" data-project-id="${p.id}" data-project-title="${titleAttr}" style="width:100%">⚖️ Score</button>
           </div>
         `;
             }).join('')}</div>`;
@@ -190,7 +192,6 @@
                         document.getElementById(`score-${f}`).value = 5;
                         document.getElementById(`${f}-val`).textContent = 5;
                     });
-                    document.getElementById('score-comments').value = '';
                     updateTotal();
                     document.getElementById('score-modal').classList.remove('hidden');
                 });
@@ -214,7 +215,6 @@
                     design: parseInt(document.getElementById('score-design').value),
                     impact: parseInt(document.getElementById('score-impact').value),
                     technical: parseInt(document.getElementById('score-technical').value),
-                    comments: document.getElementById('score-comments').value.trim(),
                 });
 
                 showToast('Score submitted!');

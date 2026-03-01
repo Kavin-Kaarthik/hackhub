@@ -82,6 +82,7 @@
     <script type="module">
         import { initNavAuth } from '/js/auth.js';
         import { getLeaderboard, subscribeToScores } from '/js/app.js';
+        import { escapeHtml } from '/js/util.js';
 
         initNavAuth();
 
@@ -103,8 +104,8 @@
                 return `
           <div class="podium-item podium-${rank}">
             <div style="margin-bottom:var(--space-sm);font-size:2rem;">${medals[i]}</div>
-            <div class="podium-name">${entry.title}</div>
-            <div class="podium-score">${entry.teams?.team_name || 'Unknown'}</div>
+            <div class="podium-name">${escapeHtml(entry.title)}</div>
+            <div class="podium-score">${escapeHtml(entry.teams?.team_name || 'Unknown')}</div>
             <div class="podium-bar">
               <div class="podium-rank">${entry.avg_score}</div>
               <div style="font-size:0.75rem;color:var(--text-muted);">avg score</div>
@@ -144,8 +145,8 @@
                 return `
           <tr>
             <td class="rank-cell ${rankClass}">#${rank}</td>
-            <td><strong>${entry.title}</strong></td>
-            <td style="color:var(--text-secondary);">${entry.teams?.team_name || 'Unknown'}</td>
+            <td><strong>${escapeHtml(entry.title)}</strong></td>
+            <td style="color:var(--text-secondary);">${escapeHtml(entry.teams?.team_name || 'Unknown')}</td>
             <td>${scoreBar(avg('innovation'))}</td>
             <td>${scoreBar(avg('design'))}</td>
             <td>${scoreBar(avg('impact'))}</td>
@@ -158,12 +159,16 @@
         }
 
         async function loadLeaderboard() {
+            const body = document.getElementById('leaderboard-body');
             try {
                 const entries = await getLeaderboard();
                 renderPodium(entries);
                 renderTable(entries);
             } catch (err) {
                 console.error('Leaderboard error:', err);
+                const podium = document.getElementById('podium');
+                podium.innerHTML = '<div class="empty-state" style="width:100%;"><p class="empty-state-text" style="color:var(--error);">Unable to load leaderboard. Try again.</p></div>';
+                body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--error);">Failed to load rankings.</td></tr>';
             }
         }
 

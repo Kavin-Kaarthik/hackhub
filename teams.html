@@ -108,16 +108,57 @@
         </div>
     </div>
 
+    <!-- Team Management Modal -->
+    <div class="modal-overlay hidden" id="team-management-modal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Team Management</h3>
+                <button class="modal-close" id="close-team-mgmt-modal">&times;</button>
+            </div>
+            <div id="team-mgmt-content">
+                <div class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Send Invitation Modal -->
+    <div class="modal-overlay hidden" id="send-invitation-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Send Team Invitation</h3>
+                <button class="modal-close" id="close-invitation-modal">&times;</button>
+            </div>
+            <div id="invitation-content">
+                <p style="color:var(--text-secondary);margin-bottom:var(--space-md);">Are you sure you want to invite this person to your team?</p>
+                <div id="invite-user-info" style="background:var(--bg-glass);padding:var(--space-md);border-radius:var(--radius-md);margin-bottom:var(--space-lg);">
+                    <!-- User info will be inserted here -->
+                </div>
+                <div style="display:flex;gap:var(--space-md);">
+                    <button class="btn btn-secondary" id="cancel-invitation-btn" style="flex:1;">Cancel</button>
+                    <button class="btn btn-primary" id="confirm-invitation-btn" style="flex:1;">Send Invitation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toast-container"></div>
 
     <script type="module">
         import { initNavAuth, getSession, getUser } from '/js/auth.js';
-        import { getTeams, getParticipants, createTeam, joinTeam, getUserTeam, addTeamMemberByEmail } from '/js/app.js';
+        import {
+            getTeams, getParticipants, createTeam, joinTeam, getUserTeam, addTeamMemberByEmail,
+            sendTeamInvitation, getPendingInvitations, getPendingRequests, removeTeamMember, deleteTeam, getTeam, leaveTeam
+        } from '/js/app.js';
+        import { escapeHtml } from '/js/util.js';
 
         initNavAuth();
 
         let currentUser = null;
         let currentUserTeam = null; // { role, teams: { id, ... } }
+        let selectedParticipantForInvite = null;
+        let selectedTeamForInvite = null;
 
         function showToast(msg, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -164,24 +205,28 @@
 
                     const avatarsHtml = members.slice(0, 5).map(m => {
                         const profile = m.profiles;
+                        const name = escapeHtml(profile?.display_name || 'member');
                         const src = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.display_name || 'U')}&background=6c63ff&color=fff&size=36`;
-                        return `<img src="${src}" alt="${profile?.display_name || 'member'}" title="${profile?.display_name || 'member'}" />`;
+                        return `<img src="${escapeHtml(src)}" alt="${name}" title="${name}" />`;
                     }).join('');
 
                     const skillsHtml = members.flatMap(m => m.profiles?.skills || [])
                         .filter((v, i, a) => a.indexOf(v) === i)
                         .slice(0, 4)
-                        .map(s => `<span class="tag">${s}</span>`).join('');
+                        .map(s => `<span class="tag">${escapeHtml(s)}</span>`).join('');
 
                     // Action buttons
                     let actionHtml = '';
                     if (isLeader) {
                         actionHtml = `
               <span class="tag tag-success" style="margin-bottom:var(--space-sm);display:inline-block;">👑 You are Leader</span>
-              ${!isFull ? `<button class="btn btn-secondary btn-sm add-member-btn" data-team-id="${team.id}" style="width:100%;margin-top:var(--space-sm);">➕ Add Member by Email</button>` : ''}
+              <button class="btn btn-secondary btn-sm team-mgmt-btn" data-team-id="${team.id}" style="width:100%;margin-top:var(--space-sm);">⚙️ Manage Team</button>
             `;
                     } else if (isMember) {
-                        actionHtml = '<span class="tag tag-success">✓ Your Team</span>';
+                        actionHtml = `
+              <span class="tag tag-success" style="margin-bottom:var(--space-sm);display:inline-block;">✓ Your Team</span>
+              <button class="btn btn-outline btn-sm leave-team-btn" data-team-id="${team.id}" data-user-id="${currentUser?.id}" style="width:100%;margin-top:var(--space-sm);color:var(--error);">Leave Team</button>
+            `;
                     } else if (!isFull && currentUser && !currentUserTeam) {
                         actionHtml = `<button class="btn btn-primary btn-sm join-team-btn" data-team-id="${team.id}" style="width:100%">Join Team</button>`;
                     } else if (isFull) {
@@ -193,10 +238,10 @@
                     return `
             <div class="card">
               <div class="team-card-header">
-                <h3 class="team-name">${team.team_name}</h3>
+                <h3 class="team-name">${escapeHtml(team.team_name)}</h3>
                 <span class="team-members-count">${memberCount}/${maxMembers}</span>
               </div>
-              <p class="team-description">${team.description || 'No description'}</p>
+              <p class="team-description">${escapeHtml(team.description || 'No description')}</p>
               <div class="team-avatars">${avatarsHtml}</div>
               <div class="tags-container mb-md">${skillsHtml}</div>
               ${actionHtml}
@@ -223,15 +268,146 @@
                     });
                 });
 
-                // Add member by email buttons (for team leaders)
-                container.querySelectorAll('.add-member-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        document.getElementById('add-member-modal').classList.remove('hidden');
-                        document.getElementById('add-member-modal').dataset.teamId = btn.dataset.teamId;
+                // Leave team buttons
+                container.querySelectorAll('.leave-team-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (!confirm('Are you sure? You will leave the team permanently.')) return;
+                        try {
+                            btn.disabled = true;
+                            btn.textContent = 'Leaving...';
+                            await leaveTeam(btn.dataset.teamId, btn.dataset.userId);
+                            showToast('👋 You have left the team');
+                            // Refresh user team data
+                            currentUserTeam = await getUserTeam(currentUser.id);
+                            loadTeams();
+                        } catch (err) {
+                            showToast(err.message || 'Failed to leave team', 'error');
+                            btn.disabled = false;
+                            btn.textContent = 'Leave Team';
+                        }
+                    });
+                });
+
+                // Team management buttons (for team leaders)
+                container.querySelectorAll('.team-mgmt-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const teamId = btn.dataset.teamId;
+                        showTeamManagement(teamId);
                     });
                 });
             } catch (err) {
                 console.error(err);
+                const container = document.getElementById('teams-tab');
+                if (container) {
+                    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p class="empty-state-text" style="color:var(--error);">Failed to load teams. Try again.</p></div>';
+                }
+                showToast(err.message || 'Failed to load teams', 'error');
+            }
+        }
+
+        async function showTeamManagement(teamId) {
+            try {
+                const team = await getTeam(teamId);
+                const pendingRequests = await getPendingRequests(teamId);
+                const modal = document.getElementById('team-management-modal');
+                const content = document.getElementById('team-mgmt-content');
+
+                const members = team.team_members || [];
+                const membersHtml = members.map(m => {
+                    const name = escapeHtml(m.profiles?.display_name || 'Anonymous');
+                    const imgSrc = m.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.profiles?.display_name || 'U')}&background=6c63ff&color=fff`;
+                    return `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-md);background:var(--bg-glass);border-radius:var(--radius-md);margin-bottom:var(--space-sm);">
+                        <div style="display:flex;gap:var(--space-md);align-items:center;">
+                            <img src="${escapeHtml(imgSrc)}" style="width:40px;height:40px;border-radius:50%;" alt="">
+                            <div>
+                                <div style="font-weight:600;">${name}</div>
+                                <div style="font-size:0.85rem;color:var(--text-secondary);">${m.role === 'leader' ? '👑 Leader' : 'Member'}</div>
+                            </div>
+                        </div>
+                        ${m.role !== 'leader' ? `<button class="btn btn-sm btn-outline remove-member-btn" data-user-id="${m.user_id}" data-team-id="${teamId}" style="color:var(--error);">Remove</button>` : ''}
+                    </div>
+                `;
+                }).join('');
+
+                const pendingHtml = pendingRequests.map(req => {
+                    const name = escapeHtml(req.profiles?.display_name || 'Anonymous');
+                    const imgSrc = req.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(req.profiles?.display_name || 'U')}&background=6c63ff&color=fff`;
+                    return `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-md);background:var(--bg-glass);border-radius:var(--radius-md);margin-bottom:var(--space-sm);">
+                        <div style="display:flex;gap:var(--space-md);align-items:center;">
+                            <img src="${escapeHtml(imgSrc)}" style="width:40px;height:40px;border-radius:50%;" alt="">
+                            <div>
+                                <div style="font-weight:600;">${name}</div>
+                                <div style="font-size:0.85rem;color:var(--text-secondary);">Pending Invite</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                }).join('');
+
+                content.innerHTML = `
+                    <div style="max-height:400px;overflow-y:auto;">
+                        <div style="margin-bottom:var(--space-lg);">
+                            <h4 style="margin-bottom:var(--space-md);">Team Members (${members.length}/${team.max_members || 4})</h4>
+                            ${membersHtml || '<p style="color:var(--text-secondary);">No members yet</p>'}
+                        </div>
+                        ${pendingHtml ? `
+                            <div style="margin-bottom:var(--space-lg);">
+                                <h4 style="margin-bottom:var(--space-md);">Pending Invitations (${pendingRequests.length})</h4>
+                                ${pendingHtml}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div style="display:flex;gap:var(--space-md);margin-top:var(--space-lg);">
+                        <button class="btn btn-secondary" id="add-email-btn" style="flex:1;">➕ Add by Email</button>
+                        <button class="btn btn-outline" id="delete-team-btn" data-team-id="${teamId}" style="flex:1;color:var(--error);">🗑️ Delete Team</button>
+                    </div>
+                `;
+
+                modal.classList.remove('hidden');
+
+                // Attach event listeners
+                content.querySelectorAll('.remove-member-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (!confirm('Remove this member from the team?')) return;
+                        try {
+                            btn.disabled = true;
+                            await removeTeamMember(teamId, btn.dataset.userId);
+                            showToast('Member removed');
+                            await showTeamManagement(teamId);
+                            loadTeams();
+                        } catch (err) {
+                            showToast(err.message || 'Failed to remove member', 'error');
+                            btn.disabled = false;
+                        }
+                    });
+                });
+
+                document.getElementById('add-email-btn').addEventListener('click', () => {
+                    modal.classList.add('hidden');
+                    document.getElementById('add-member-modal').classList.remove('hidden');
+                    document.getElementById('add-member-modal').dataset.teamId = teamId;
+                });
+
+                document.getElementById('delete-team-btn').addEventListener('click', async () => {
+                    if (!confirm('Are you sure? This will delete the team permanently and affect all members.')) return;
+                    try {
+                        const btn = document.getElementById('delete-team-btn');
+                        btn.disabled = true;
+                        btn.textContent = 'Deleting...';
+                        await deleteTeam(teamId);
+                        showToast('🗑️ Team deleted');
+                        modal.classList.add('hidden');
+                        currentUserTeam = await getUserTeam(currentUser.id);
+                        loadTeams();
+                    } catch (err) {
+                        showToast(err.message || 'Failed to delete team', 'error');
+                    }
+                });
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to load team management', 'error');
             }
         }
 
@@ -247,25 +423,55 @@
 
                 container.innerHTML = participants.map(p => {
                     const avatarSrc = p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.display_name || 'U')}&background=6c63ff&color=fff&size=80`;
-                    const skillsHtml = (p.skills || []).map(s => `<span class="tag">${s}</span>`).join('');
+                    const skillsHtml = (p.skills || []).map(s => `<span class="tag">${escapeHtml(s)}</span>`).join('');
+                    const displayName = escapeHtml(p.display_name || 'Anonymous');
+                    const nameAttr = escapeHtml(p.display_name || '').replace(/"/g, '&quot;');
+                    let actionHtml = '';
+                    if (currentUserTeam && currentUserTeam.role === 'leader') {
+                        actionHtml = `<button class="btn btn-primary btn-sm invite-member-btn" data-user-id="${p.id}" data-user-name="${nameAttr}" style="width:100%;margin-top:var(--space-md);">📩 Send Invitation</button>`;
+                    }
 
                     return `
             <div class="card">
               <div class="profile-avatar-container">
-                <img class="profile-avatar" src="${avatarSrc}" alt="${p.display_name}" />
+                <img class="profile-avatar" src="${escapeHtml(avatarSrc)}" alt="${displayName}" />
                 <div class="profile-info">
-                  <h3>${p.display_name || 'Anonymous'}</h3>
-                  <p>${p.experience_level || 'Not specified'}</p>
+                  <h3>${displayName}</h3>
+                  <p>${escapeHtml(p.experience_level || 'Not specified')}</p>
                 </div>
               </div>
-              <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:var(--space-md);">${p.bio || 'No bio yet'}</p>
+              <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:var(--space-md);">${escapeHtml(p.bio || 'No bio yet')}</p>
               <div class="tags-container">${skillsHtml}</div>
+              ${actionHtml}
             </div>
           `;
                 }).join('');
+
+                // Invite buttons for team leaders
+                container.querySelectorAll('.invite-member-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        selectedParticipantForInvite = {
+                            id: btn.dataset.userId,
+                            displayName: btn.dataset.userName
+                        };
+                        showSendInvitationModal(selectedParticipantForInvite);
+                    });
+                });
             } catch (err) {
                 console.error(err);
+                const container = document.getElementById('participants-tab');
+                if (container) {
+                    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p class="empty-state-text" style="color:var(--error);">Failed to load participants. Try again.</p></div>';
+                }
+                showToast(err.message || 'Failed to load participants', 'error');
             }
+        }
+
+        function showSendInvitationModal(participant) {
+            const modal = document.getElementById('send-invitation-modal');
+            const userInfo = document.getElementById('invite-user-info');
+            userInfo.innerHTML = `<strong>${escapeHtml(participant.displayName || 'User')}</strong> will receive an invitation to your team`;
+            modal.classList.remove('hidden');
         }
 
         // ── Create team modal ──
@@ -284,6 +490,36 @@
 
         document.getElementById('close-modal').addEventListener('click', () => {
             document.getElementById('create-team-modal').classList.add('hidden');
+        });
+
+        document.getElementById('close-team-mgmt-modal').addEventListener('click', () => {
+            document.getElementById('team-management-modal').classList.add('hidden');
+        });
+
+        document.getElementById('close-invitation-modal').addEventListener('click', () => {
+            document.getElementById('send-invitation-modal').classList.add('hidden');
+        });
+
+        document.getElementById('cancel-invitation-btn').addEventListener('click', () => {
+            document.getElementById('send-invitation-modal').classList.add('hidden');
+        });
+
+        document.getElementById('confirm-invitation-btn').addEventListener('click', async () => {
+            if (!selectedParticipantForInvite || !currentUserTeam) return;
+            try {
+                const btn = document.getElementById('confirm-invitation-btn');
+                btn.disabled = true;
+                btn.textContent = 'Sending...';
+                await sendTeamInvitation(currentUserTeam.teams.id, selectedParticipantForInvite.id);
+                showToast('📩 Invitation sent!');
+                document.getElementById('send-invitation-modal').classList.add('hidden');
+                loadParticipants();
+            } catch (err) {
+                showToast(err.message || 'Failed to send invitation', 'error');
+            } finally {
+                document.getElementById('confirm-invitation-btn').disabled = false;
+                document.getElementById('confirm-invitation-btn').textContent = 'Send Invitation';
+            }
         });
 
         document.getElementById('submit-team-btn').addEventListener('click', async () => {

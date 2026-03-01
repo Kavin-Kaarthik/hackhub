@@ -97,6 +97,16 @@
                 </div>
             </div>
 
+            <!-- Team Invitations -->
+            <div class="card" id="invitations-card" style="display:none;">
+                <h3 style="margin-bottom: var(--space-lg);">📩 Team Invitations</h3>
+                <div id="invitations-content">
+                    <div class="loading-overlay">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Links -->
             <div class="card">
                 <h3 style="margin-bottom: var(--space-lg);">🚀 Quick Actions</h3>
@@ -104,8 +114,11 @@
                     <a href="/teams.html" class="btn btn-secondary" style="width:100%">👥 Browse Teams</a>
                     <a href="/submit.html" class="btn btn-secondary" style="width:100%">📝 Submit Project</a>
                     <a href="/leaderboard.html" class="btn btn-secondary" style="width:100%">🏆 View Leaderboard</a>
-                    <a href="/judging.html" class="btn btn-secondary" style="width:100%" id="judging-link"
-                        style="display:none">⚖️ Judging Panel</a>
+                    <a href="/judging.html" class="btn btn-secondary" style="width:100%;display:none"
+                        id="judging-link">⚖️ Judging Panel</a>
+                    <a href="/admin.html" class="btn btn-secondary"
+                        style="width:100%;display:none;background:rgba(255,167,38,0.15);color:var(--warning);border-color:rgba(255,167,38,0.3);"
+                        id="admin-link">🔧 Admin Panel</a>
                 </div>
             </div>
 
@@ -116,7 +129,8 @@
 
     <script type="module">
         import { requireAuth, initNavAuth, getUser } from '/js/auth.js';
-        import { getProfile, updateProfile, getUserTeam, isJudge } from '/js/app.js';
+        import { getProfile, updateProfile, getUserTeam, isJudge, isAdmin, getPendingInvitations, acceptTeamInvitation, rejectTeamInvitation, leaveTeam } from '/js/app.js';
+        import { escapeHtml } from '/js/util.js';
 
         function showToast(msg, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -125,6 +139,133 @@
             toast.textContent = msg;
             container.appendChild(toast);
             setTimeout(() => toast.remove(), 3500);
+        }
+
+        async function loadPendingInvitations(userId) {
+            try {
+                const invitations = await getPendingInvitations(userId);
+                const container = document.getElementById('invitations-content');
+                const card = document.getElementById('invitations-card');
+
+                if (!invitations || invitations.length === 0) {
+                    card.style.display = 'none';
+                    return;
+                }
+
+                card.style.display = 'block';
+
+                container.innerHTML = invitations.map(inv => `
+                    <div style="background:var(--bg-glass);padding:var(--space-md);border-radius:var(--radius-md);margin-bottom:var(--space-md);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md);">
+                            <div>
+                                <h4 style="margin-bottom:var(--space-xs);">${escapeHtml(inv.teams?.team_name || 'Team')}</h4>
+                                <p style="color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(inv.teams?.description || 'No description')}</p>
+                                <p style="color:var(--text-muted);font-size:0.8rem;margin-top:var(--space-xs);">Members: ${inv.teams?.team_members?.length || 0}/${inv.teams?.max_members || 4}</p>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:var(--space-md);">
+                            <button class="btn btn-primary btn-sm accept-invite-btn" data-invite-id="${inv.id}" style="flex:1;">✓ Accept</button>
+                            <button class="btn btn-outline btn-sm reject-invite-btn" data-invite-id="${inv.id}" style="flex:1;">✗ Reject</button>
+                        </div>
+                    </div>
+                `).join('');
+
+                container.querySelectorAll('.accept-invite-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        try {
+                            btn.disabled = true;
+                            btn.textContent = 'Accepting...';
+                            await acceptTeamInvitation(btn.dataset.inviteId, userId);
+                            showToast('🎉 Joined the team!');
+                            loadPendingInvitations(userId);
+                            loadTeamStatus(userId);
+                        } catch (err) {
+                            showToast(err.message || 'Failed to accept invitation', 'error');
+                            btn.disabled = false;
+                            btn.textContent = '✓ Accept';
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.reject-invite-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        try {
+                            btn.disabled = true;
+                            btn.textContent = 'Rejecting...';
+                            await rejectTeamInvitation(btn.dataset.inviteId, userId);
+                            showToast('Invitation rejected');
+                            loadPendingInvitations(userId);
+                        } catch (err) {
+                            showToast(err.message || 'Failed to reject invitation', 'error');
+                            btn.disabled = false;
+                            btn.textContent = '✗ Reject';
+                        }
+                    });
+                });
+            } catch (err) {
+                console.error('Invitations load error:', err);
+                showToast(err.message || 'Failed to load invitations', 'error');
+            }
+        }
+
+        async function loadTeamStatus(userId) {
+            try {
+                const teamData = await getUserTeam(userId);
+                const container = document.getElementById('team-status-content');
+
+                if (teamData && teamData.teams) {
+                    const leaveButtonHtml = `
+              <button class="btn btn-outline btn-sm leave-team-btn" data-team-id="${teamData.teams.id}" data-user-id="${userId}" style="width:100%;margin-top:var(--space-md);color:var(--error);">
+                Leave Team
+              </button>
+            `;
+                    container.innerHTML = `
+            <div style="padding: var(--space-md) 0;">
+              <h4 style="margin-bottom: var(--space-sm);">${escapeHtml(teamData.teams.team_name)}</h4>
+              <p style="color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(teamData.teams.description || 'No description')}</p>
+              <div class="mt-md">
+                <span class="tag">${teamData.role === 'leader' ? '👑 ' : ''}${teamData.role}</span>
+              </div>
+              <a href="/teams.html" class="btn btn-secondary btn-sm mt-lg" style="width:100%">View Team</a>
+              ${leaveButtonHtml}
+            </div>
+          `;
+
+                    // Wire up leave team button
+                    const leaveBtn = container.querySelector('.leave-team-btn');
+                    if (leaveBtn) {
+                        leaveBtn.addEventListener('click', async () => {
+                            if (!confirm('Are you sure? You will leave the team permanently.')) return;
+                            try {
+                                leaveBtn.disabled = true;
+                                leaveBtn.textContent = 'Leaving...';
+                                await leaveTeam(teamData.teams.id, userId);
+                                showToast('You have left the team');
+                                loadTeamStatus(userId);
+                            } catch (err) {
+                                showToast(err.message || 'Failed to leave team', 'error');
+                                leaveBtn.disabled = false;
+                                leaveBtn.textContent = 'Leave Team';
+                            }
+                        });
+                    }
+                } else {
+                    container.innerHTML = `
+            <div class="empty-state" style="padding: var(--space-lg) 0;">
+              <div class="empty-state-icon">🔍</div>
+              <p class="empty-state-text">You haven't joined a team yet</p>
+              <a href="/teams.html" class="btn btn-primary">Find a Team</a>
+            </div>
+          `;
+                }
+            } catch (err) {
+                console.error('Team load error:', err);
+                const container = document.getElementById('team-status-content');
+                if (container) {
+                    container.innerHTML = '<div class="empty-state" style="padding: var(--space-lg) 0;"><p class="empty-state-text" style="color: var(--error);">Failed to load team. Try again.</p></div>';
+                }
+                showToast(err.message || 'Failed to load team', 'error');
+            }
         }
 
         async function init() {
@@ -153,6 +294,7 @@
                 document.getElementById('edit-looking').checked = profile.looking_for_team || false;
             } catch (err) {
                 console.error('Profile load error:', err);
+                showToast(err.message || 'Failed to load profile', 'error');
             }
 
             // Save profile
@@ -185,39 +327,24 @@
             });
 
             // Load team status
-            try {
-                const teamData = await getUserTeam(userId);
-                const container = document.getElementById('team-status-content');
+            loadTeamStatus(userId);
 
-                if (teamData && teamData.teams) {
-                    container.innerHTML = `
-            <div style="padding: var(--space-md) 0;">
-              <h4 style="margin-bottom: var(--space-sm);">${teamData.teams.team_name}</h4>
-              <p style="color: var(--text-secondary); font-size: 0.9rem;">${teamData.teams.description || 'No description'}</p>
-              <div class="mt-md">
-                <span class="tag">${teamData.role}</span>
-              </div>
-              <a href="/teams.html" class="btn btn-secondary btn-sm mt-lg" style="width:100%">View Team</a>
-            </div>
-          `;
-                } else {
-                    container.innerHTML = `
-            <div class="empty-state" style="padding: var(--space-lg) 0;">
-              <div class="empty-state-icon">🔍</div>
-              <p class="empty-state-text">You haven't joined a team yet</p>
-              <a href="/teams.html" class="btn btn-primary">Find a Team</a>
-            </div>
-          `;
-                }
-            } catch (err) {
-                console.error('Team load error:', err);
-            }
+            // Load pending invitations
+            loadPendingInvitations(userId);
 
             // Check if judge
             try {
                 const judgeData = await isJudge(userId);
                 if (judgeData) {
                     document.getElementById('judging-link').style.display = 'block';
+                }
+            } catch (err) { }
+
+            // Check if admin
+            try {
+                const admin = await isAdmin(userId);
+                if (admin) {
+                    document.getElementById('admin-link').style.display = 'block';
                 }
             } catch (err) { }
         }

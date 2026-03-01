@@ -96,8 +96,9 @@
     <div class="toast-container" id="toast-container"></div>
 
     <script type="module">
-        import { initNavAuth, getSession, getUser } from '/js/auth.js';
+        import { requireAuth, initNavAuth, getUser } from '/js/auth.js';
         import { getProjects, submitProject, getUserTeam } from '/js/app.js';
+        import { escapeHtml } from '/js/util.js';
 
         initNavAuth();
 
@@ -113,9 +114,9 @@
         let currentTeamId = null;
 
         async function loadProjects() {
+            const container = document.getElementById('projects-container');
             try {
                 const projects = await getProjects();
-                const container = document.getElementById('projects-container');
 
                 if (!projects.length) {
                     container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">🏗️</div><p class="empty-state-text">No projects submitted yet. Be the first!</p></div>';
@@ -123,46 +124,59 @@
                 }
 
                 container.innerHTML = projects.map(p => {
-                    const techHtml = (p.tech_stack || []).map(t => `<span class="tag">${t}</span>`).join('');
-                    const teamName = p.teams?.team_name || 'Unknown Team';
+                    const techHtml = (p.tech_stack || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
+                    const teamName = escapeHtml(p.teams?.team_name || 'Unknown Team');
                     const date = new Date(p.submitted_at).toLocaleDateString();
+                    const title = escapeHtml(p.title);
+                    const desc = escapeHtml(p.description || 'No description provided');
+                    const githubUrl = p.github_url ? escapeHtml(p.github_url) : '';
+                    const demoUrl = p.demo_url ? escapeHtml(p.demo_url) : '';
 
                     return `
             <div class="card">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:var(--space-sm);">
-                <h3 class="project-card-title">${p.title}</h3>
+                <h3 class="project-card-title">${title}</h3>
               </div>
               <p style="color:var(--accent-secondary);font-size:0.8rem;margin-bottom:var(--space-sm);">by ${teamName} • ${date}</p>
-              <p class="project-card-desc">${p.description || 'No description provided'}</p>
+              <p class="project-card-desc">${desc}</p>
               <div class="tags-container mb-md">${techHtml}</div>
               <div class="project-links">
-                ${p.github_url ? `<a href="${p.github_url}" target="_blank" class="btn btn-secondary btn-sm">GitHub</a>` : ''}
-                ${p.demo_url ? `<a href="${p.demo_url}" target="_blank" class="btn btn-primary btn-sm">Live Demo</a>` : ''}
+                ${githubUrl ? `<a href="${githubUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">GitHub</a>` : ''}
+                ${demoUrl ? `<a href="${demoUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">Live Demo</a>` : ''}
               </div>
             </div>
           `;
                 }).join('');
             } catch (err) {
                 console.error(err);
+                container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p class="empty-state-text" style="color:var(--error);">Failed to load projects. Try again.</p></div>';
+                showToast(err.message || 'Failed to load projects', 'error');
             }
         }
 
-        // Init
+        // Init: require auth, then show form or no-team message
         (async () => {
-            const session = await getSession();
-            if (session) {
-                const user = await getUser();
-                try {
-                    const teamData = await getUserTeam(user.id);
-                    if (teamData && teamData.role === 'leader') {
-                        currentTeamId = teamData.teams.id;
-                        document.getElementById('submit-form-container').classList.remove('hidden');
-                    } else {
-                        document.getElementById('no-team-msg').classList.remove('hidden');
-                    }
-                } catch (err) {
-                    document.getElementById('no-team-msg').classList.remove('hidden');
+            const session = await requireAuth();
+            if (!session) return;
+
+            const user = await getUser();
+            const formEl = document.getElementById('submit-form-container');
+            const noTeamEl = document.getElementById('no-team-msg');
+            const projectsEl = document.getElementById('projects-container');
+
+            // Loading state while resolving team
+            projectsEl.innerHTML = '<div class="loading-overlay" style="grid-column:1/-1;"><div class="spinner"></div></div>';
+            try {
+                const teamData = await getUserTeam(user.id);
+                if (teamData && teamData.role === 'leader') {
+                    currentTeamId = teamData.teams.id;
+                    formEl.classList.remove('hidden');
+                } else {
+                    noTeamEl.classList.remove('hidden');
                 }
+            } catch (err) {
+                noTeamEl.classList.remove('hidden');
+                showToast(err.message || 'Could not load team status', 'error');
             }
 
             loadProjects();
