@@ -109,6 +109,9 @@ export async function leaveTeam(teamId, userId) {
         .eq('team_id', teamId)
         .eq('user_id', userId);
     if (error) throw error;
+
+    // Reset looking_for_team so the user appears in the pool again
+    await supabase.from('profiles').update({ looking_for_team: true }).eq('id', userId);
 }
 
 export async function addTeamMemberByEmail(teamId, email) {
