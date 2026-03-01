@@ -49,46 +49,7 @@
           </svg>
           Sign in with Google
         </button>
-
-        <div class="auth-divider">or continue with email</div>
-
-        <!-- Email Input -->
-        <div class="form-group">
-          <label class="form-label" for="email-input">Email Address</label>
-          <input type="email" class="form-input" id="email-input" placeholder="you@example.com" />
-        </div>
-
-        <button class="btn btn-primary btn-lg" style="width: 100%" id="send-link-btn">
-          ✉️ Send Magic Link
-        </button>
-
-        <p class="auth-toggle">
-          We'll send a sign-in link to your email.<br />No password needed — just click to sign in!
-        </p>
-      </div>
-
-      <!-- Step 2: Check email message -->
-      <div id="auth-step-2" class="hidden">
-        <div style="text-align:center; padding: var(--space-xl) 0;">
-          <div style="font-size: 4rem; margin-bottom: var(--space-lg);">📧</div>
-          <h2 class="auth-title">Check Your Email</h2>
-          <p class="auth-subtitle">
-            We've sent a magic link to<br />
-            <strong id="link-email-display" style="color: var(--accent-secondary);"></strong>
-          </p>
-          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: var(--space-lg); line-height: 1.8;">
-            Click the link in the email to sign in instantly.<br />
-            Don't see it? Check your <strong>spam or junk folder</strong>.
-          </p>
-
-          <button class="btn btn-secondary mt-xl" id="resend-link-btn">
-            🔄 Resend Link
-          </button>
-
-          <p class="auth-toggle mt-lg">
-            <a href="#" id="back-to-step1">← Use a different email</a>
-          </p>
-        </div>
+        <p class="auth-toggle">Use your Google account to sign in instantly.</p>
       </div>
 
       <!-- Loading state -->
@@ -109,16 +70,13 @@
   <div class="toast-container" id="toast-container"></div>
 
   <script type="module">
-    import { signInWithGoogle, sendMagicLink, getSession } from '/js/auth.js';
+    import { signInWithGoogle, getSession } from '/js/auth.js';
 
     const step1 = document.getElementById('auth-step-1');
-    const step2 = document.getElementById('auth-step-2');
     const loadingEl = document.getElementById('auth-loading');
     const errorEl = document.getElementById('auth-error');
-    const emailInput = document.getElementById('email-input');
-    let currentEmail = '';
 
-    // Check if already logged in
+    // Redirect if already logged in
     (async () => {
       const session = await getSession();
       if (session) window.location.href = '/dashboard.html';
@@ -133,10 +91,10 @@
     function setLoading(on) {
       if (on) {
         step1.classList.add('hidden');
-        step2.classList.add('hidden');
         loadingEl.classList.remove('hidden');
       } else {
         loadingEl.classList.add('hidden');
+        step1.classList.remove('hidden');
       }
     }
 
@@ -147,63 +105,8 @@
         await signInWithGoogle();
       } catch (err) {
         setLoading(false);
-        step1.classList.remove('hidden');
         showError(err.message || 'Google sign-in failed');
       }
-    });
-
-    // ── Send Magic Link ──
-    document.getElementById('send-link-btn').addEventListener('click', async () => {
-      const email = emailInput.value.trim();
-      if (!email || !email.includes('@')) {
-        showError('Please enter a valid email address');
-        return;
-      }
-
-      try {
-        setLoading(true);
-        await sendMagicLink(email);
-        currentEmail = email;
-        setLoading(false);
-        step1.classList.add('hidden');
-        step2.classList.remove('hidden');
-        document.getElementById('link-email-display').textContent = email;
-      } catch (err) {
-        setLoading(false);
-        step1.classList.remove('hidden');
-        showError(err.message || 'Failed to send link');
-      }
-    });
-
-    // Allow Enter key on email input
-    emailInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('send-link-btn').click();
-    });
-
-    // ── Resend Link ──
-    document.getElementById('resend-link-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('resend-link-btn');
-      try {
-        btn.disabled = true;
-        btn.textContent = 'Sending...';
-        await sendMagicLink(currentEmail);
-        btn.textContent = '✅ Link Sent!';
-        setTimeout(() => {
-          btn.textContent = '🔄 Resend Link';
-          btn.disabled = false;
-        }, 3000);
-      } catch (err) {
-        showError(err.message || 'Failed to resend link');
-        btn.textContent = '🔄 Resend Link';
-        btn.disabled = false;
-      }
-    });
-
-    // ── Back button ──
-    document.getElementById('back-to-step1').addEventListener('click', (e) => {
-      e.preventDefault();
-      step2.classList.add('hidden');
-      step1.classList.remove('hidden');
     });
   </script>
 </body>
