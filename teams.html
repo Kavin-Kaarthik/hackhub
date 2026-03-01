@@ -143,20 +143,34 @@
         </div>
     </div>
 
+    <!-- View Members Modal -->
+    <div class="modal-overlay hidden" id="view-members-modal">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="view-members-title">Team Members</h3>
+                <button class="modal-close" id="close-view-members-modal">&times;</button>
+            </div>
+            <div id="view-members-content">
+                <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toast-container"></div>
 
     <script type="module">
         import { initNavAuth, getSession, getUser } from '/js/auth.js';
         import {
             getTeams, getParticipants, createTeam, joinTeam, getUserTeam, addTeamMemberByEmail,
-            sendTeamInvitation, getPendingInvitations, getPendingRequests, removeTeamMember, deleteTeam, getTeam, leaveTeam
+            sendTeamInvitation, getPendingInvitations, getPendingRequests, removeTeamMember, deleteTeam, getTeam, leaveTeam, isJudge
         } from '/js/app.js';
         import { escapeHtml } from '/js/util.js';
 
         initNavAuth();
 
         let currentUser = null;
-        let currentUserTeam = null; // { role, teams: { id, ... } }
+        let currentUserTeam = null;
+        let currentUserIsJudge = false;
         let selectedParticipantForInvite = null;
         let selectedTeamForInvite = null;
 
@@ -217,7 +231,12 @@
 
                     // Action buttons
                     let actionHtml = '';
-                    if (isLeader) {
+                    if (currentUserIsJudge) {
+                        actionHtml = `
+              <span class="tag" style="margin-bottom:var(--space-sm);display:inline-block;background:rgba(108,99,255,0.15);color:var(--accent-primary);">⚖️ You are a Judge</span>
+              <a href="/judging.html" class="btn btn-primary btn-sm" style="width:100%;margin-top:var(--space-sm);display:block;text-align:center;">🔍 Evaluate Submissions</a>
+            `;
+                    } else if (isLeader) {
                         actionHtml = `
               <span class="tag tag-success" style="margin-bottom:var(--space-sm);display:inline-block;">👑 You are Leader</span>
               <button class="btn btn-secondary btn-sm team-mgmt-btn" data-team-id="${team.id}" style="width:100%;margin-top:var(--space-sm);">⚙️ Manage Team</button>
@@ -245,6 +264,7 @@
               <div class="team-avatars">${avatarsHtml}</div>
               <div class="tags-container mb-md">${skillsHtml}</div>
               ${actionHtml}
+              <button class="btn btn-outline btn-sm view-team-btn" data-team-id="${team.id}" style="width:100%;margin-top:var(--space-sm);">👥 View Members</button>
             </div>
           `;
                 }).join('');
@@ -293,6 +313,13 @@
                     btn.addEventListener('click', async () => {
                         const teamId = btn.dataset.teamId;
                         showTeamManagement(teamId);
+                    });
+                });
+
+                // View members buttons (visible to everyone)
+                container.querySelectorAll('.view-team-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        await showViewMembersModal(btn.dataset.teamId);
                     });
                 });
             } catch (err) {
@@ -411,6 +438,54 @@
             }
         }
 
+        // Close view members modal
+        document.getElementById('close-view-members-modal').addEventListener('click', () => {
+            document.getElementById('view-members-modal').classList.add('hidden');
+        });
+
+        async function showViewMembersModal(teamId) {
+            const modal = document.getElementById('view-members-modal');
+            const content = document.getElementById('view-members-content');
+            const title = document.getElementById('view-members-title');
+            modal.classList.remove('hidden');
+            content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+            try {
+                const team = await getTeam(teamId);
+                title.textContent = escapeHtml(team.team_name) + ' — Members';
+                const members = team.team_members || [];
+
+                if (!members.length) {
+                    content.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:var(--space-xl);">No members yet</p>';
+                    return;
+                }
+
+                content.innerHTML = members.map(m => {
+                    const name = escapeHtml(m.profiles?.display_name || 'Anonymous');
+                    const level = escapeHtml(m.profiles?.experience_level || 'Not specified');
+                    const skills = (m.profiles?.skills || []).map(s => `<span class="tag">${escapeHtml(s)}</span>`).join('');
+                    const imgSrc = m.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.profiles?.display_name || 'U')}&background=6c63ff&color=fff`;
+                    const roleLabel = m.role === 'leader' ? '👑 Leader' : '👤 Member';
+                    const roleColor = m.role === 'leader' ? 'var(--accent-primary)' : 'var(--text-secondary)';
+                    return `
+                        <div style="display:flex;gap:var(--space-md);align-items:flex-start;padding:var(--space-md);background:var(--bg-glass);border-radius:var(--radius-md);margin-bottom:var(--space-sm);">
+                            <img src="${escapeHtml(imgSrc)}" style="width:48px;height:48px;border-radius:50%;flex-shrink:0;" alt="">
+                            <div style="flex:1;min-width:0;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                    <span style="font-weight:600;">${name}</span>
+                                    <span style="font-size:0.8rem;color:${roleColor};">${roleLabel}</span>
+                                </div>
+                                <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:var(--space-sm);">${level}</div>
+                                <div style="display:flex;flex-wrap:wrap;gap:4px;">${skills || '<span style="font-size:0.8rem;color:var(--text-secondary);">No skills listed</span>'}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                content.innerHTML = `<p style="color:var(--error);text-align:center;padding:var(--space-xl);">${escapeHtml(err.message || 'Failed to load members')}</p>`;
+            }
+        }
+
         async function loadParticipants() {
             try {
                 const participants = await getParticipants({ lookingForTeam: true });
@@ -443,6 +518,7 @@
               <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:var(--space-md);">${escapeHtml(p.bio || 'No bio yet')}</p>
               <div class="tags-container">${skillsHtml}</div>
               ${actionHtml}
+              <button class="btn btn-outline btn-sm view-team-btn" data-team-id="${team.id}" style="width:100%;margin-top:var(--space-sm);">👥 View Members</button>
             </div>
           `;
                 }).join('');
@@ -593,6 +669,12 @@
                     currentUserTeam = await getUserTeam(currentUser.id);
                 } catch (err) {
                     currentUserTeam = null;
+                }
+                try {
+                    const judgeData = await isJudge(currentUser.id);
+                    currentUserIsJudge = !!judgeData;
+                } catch (err) {
+                    currentUserIsJudge = false;
                 }
             }
             loadTeams();
